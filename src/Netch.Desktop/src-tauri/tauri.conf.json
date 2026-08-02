@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Netch Modernization Preview",
+  "version": "0.1.0",
+  "identifier": "org.netchfork.preview",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Netch Modernization Preview",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 920,
+        "minHeight": 660,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost; style-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["../../../Netch/Resources/Netch.ico"],
+    "copyright": "Copyright (c) 2019 AmazingDM and Contributors; fork contributors",
+    "shortDescription": "A modernized fork of the Netch Windows proxy client"
+  }
+}

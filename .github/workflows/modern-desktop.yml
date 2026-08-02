@@ -1,0 +1,60 @@
+name: Modern desktop
+
+on:
+  push:
+    paths:
+      - "src/Netch.Desktop/**"
+      - ".github/workflows/modern-desktop.yml"
+  pull_request:
+    paths:
+      - "src/Netch.Desktop/**"
+      - ".github/workflows/modern-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: TypeScript and Rust checks
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src/Netch.Desktop
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Netch.Desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run check
+
+      - name: Test frontend
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Select stable Rust toolchain
+        run: rustup default stable
+
+      - name: Check Rust formatting
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo fmt --check
+
+      - name: Lint Rust
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Test Rust
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo test --locked
