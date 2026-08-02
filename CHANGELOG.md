@@ -14,6 +14,7 @@ name and compatibility policy.
 - Tauri 2, React, and TypeScript desktop preview workspace.
 - Hardened, legacy-compatible executable discovery command and Rust unit tests.
 - Review-and-copy interface for generated process-mode rules.
+- Persisted system, light, and dark appearance modes.
 - Modern desktop CI checks for TypeScript and Rust.
 - Architecture, security, compatibility, roadmap, and agent documentation.
 
@@ -21,6 +22,7 @@ name and compatibility policy.
 
 - Replaced the upstream placeholder README with an accurate fork status and
   development guide while preserving explicit upstream credit.
+- Removed generated TypeScript build metadata from version control.
 
 ### Security
 
@@ -34,4 +36,3 @@ name and compatibility policy.
 - The modern UI is not connected to the routing engine and cannot replace the
   legacy client yet.
 - Legacy .NET targets and bundled binary provenance still require remediation.
-

@@ -23,6 +23,8 @@ shell and a UI-independent engine boundary are developed alongside them.
   executables and emits rules compatible with legacy process-mode files.
 - The new scanner has deterministic output, skips directory links/reparse
   points, reports inaccessible paths, and enforces a configurable result limit.
+- The preview follows the Windows theme by default and also supports persisted
+  light or dark appearance overrides.
 
 The modern desktop is currently a **functional preview**, not a complete proxy
 client. Starting/stopping routes and editing production configuration will be

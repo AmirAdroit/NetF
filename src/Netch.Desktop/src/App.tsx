@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -8,15 +8,24 @@ import {
   FolderIcon,
   GridIcon,
   LayersIcon,
+  MonitorIcon,
+  MoonIcon,
   SearchIcon,
   ServerIcon,
   SettingsIcon,
+  SunIcon,
 } from "./icons";
 import {
   selectedRules,
   summarizeScan,
   type ScanReport,
 } from "./scanner";
+import {
+  normalizeThemePreference,
+  resolveTheme,
+  THEME_STORAGE_KEY,
+  type ThemePreference,
+} from "./theme";
 
 const navItems = [
   { label: "Overview", icon: GridIcon, disabled: true },
@@ -27,6 +36,9 @@ const navItems = [
 ];
 
 function App() {
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
+    normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY)),
+  );
   const [folder, setFolder] = useState("");
   const [maxResults, setMaxResults] = useState(50);
   const [report, setReport] = useState<ScanReport | null>(null);
@@ -40,6 +52,24 @@ function App() {
     () => selectedRules(report, excludedRules),
     [report, excludedRules],
   );
+
+  useEffect(() => {
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function applyTheme() {
+      const resolved = resolveTheme(themePreference, systemTheme.matches);
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+    }
+
+    localStorage.setItem(THEME_STORAGE_KEY, themePreference);
+    applyTheme();
+
+    if (themePreference !== "system") return;
+
+    systemTheme.addEventListener("change", applyTheme);
+    return () => systemTheme.removeEventListener("change", applyTheme);
+  }, [themePreference]);
 
   async function chooseFolder() {
     try {
@@ -145,8 +175,29 @@ function App() {
             <p className="eyebrow">Process mode</p>
             <h1>Executable discovery</h1>
           </div>
-          <div className="preview-badge">
-            <span /> Preview · configuration writes disabled
+          <div className="topbar-actions">
+            <div className="theme-switcher" aria-label="Color theme">
+              {([
+                ["system", MonitorIcon, "Use system theme"],
+                ["light", SunIcon, "Use light theme"],
+                ["dark", MoonIcon, "Use dark theme"],
+              ] as const).map(([preference, Icon, label]) => (
+                <button
+                  aria-label={label}
+                  aria-pressed={themePreference === preference}
+                  className={themePreference === preference ? "active" : ""}
+                  key={preference}
+                  onClick={() => setThemePreference(preference)}
+                  title={label}
+                  type="button"
+                >
+                  <Icon />
+                </button>
+              ))}
+            </div>
+            <div className="preview-badge">
+              <span /> Preview · configuration writes disabled
+            </div>
           </div>
         </header>
 
