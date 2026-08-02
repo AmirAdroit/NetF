@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canConnect, modeLabel, serverLabel, type EngineSnapshot } from "./engine";
+import {
+  canConnect,
+  canStopEngine,
+  modeLabel,
+  serverLabel,
+  type EngineSnapshot,
+} from "./engine";
 
 const snapshot: EngineSnapshot = {
   apiVersion: 1,
@@ -7,6 +13,8 @@ const snapshot: EngineSnapshot = {
   servers: [{ id: 0, type: "VLESS", remark: "Primary", group: "Default" }],
   modes: [{ id: 0, type: "ProcessMode", remark: "", source: "Game\\DOOM.txt" }],
   missingHelpers: [],
+  coreSource: "attached-runtime",
+  proxyCores: ["direct SOCKS", "Xray"],
 };
 
 describe("engine view model", () => {
@@ -24,5 +32,16 @@ describe("engine view model", () => {
     expect(
       canConnect({ ...snapshot, status: { state: "connected", message: "Connected" } }, 0, 0),
     ).toBe(false);
+  });
+
+  it("keeps stop available when a failed request leaves state uncertain", () => {
+    expect(canStopEngine(snapshot, false)).toBe(false);
+    expect(canStopEngine(snapshot, true)).toBe(true);
+    expect(
+      canStopEngine(
+        { ...snapshot, status: { state: "connected", message: "Connected" } },
+        false,
+      ),
+    ).toBe(true);
   });
 });

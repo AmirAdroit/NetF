@@ -22,6 +22,7 @@ import {
 } from "./scanner";
 import {
   canConnect,
+  canStopEngine,
   modeLabel,
   serverLabel,
   type EngineSnapshot,
@@ -59,6 +60,7 @@ function App() {
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
   const [engineBusy, setEngineBusy] = useState(false);
+  const [connectionMayBeActive, setConnectionMayBeActive] = useState(false);
 
   const summary = summarizeScan(report);
   const rules = useMemo(
@@ -111,6 +113,7 @@ function App() {
       const { runtimeRoot: selected, snapshot } = attachment;
       setRuntimeRoot(selected);
       setEngineSnapshot(snapshot);
+      setConnectionMayBeActive(snapshot.status.state !== "stopped");
       setSelectedServerId(snapshot.servers[0]?.id ?? null);
       setSelectedModeId(snapshot.modes[0]?.id ?? null);
     } catch (attachError) {
@@ -123,6 +126,7 @@ function App() {
   async function connectProfile() {
     if (!canConnect(engineSnapshot, selectedServerId, selectedModeId) || engineBusy) return;
     setEngineBusy(true);
+    setConnectionMayBeActive(true);
     setError("");
     try {
       const status = await invoke<EngineStatus>("connect_profile", {
@@ -132,6 +136,17 @@ function App() {
       setEngineSnapshot((current) => (current ? { ...current, status } : current));
     } catch (connectError) {
       setError(String(connectError));
+      setEngineSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              status: {
+                state: "failed",
+                message: "Connection result is uncertain. Stop the engine before retrying.",
+              },
+            }
+          : current,
+      );
       await refreshEngine();
     } finally {
       setEngineBusy(false);
@@ -145,8 +160,10 @@ function App() {
     try {
       const status = await invoke<EngineStatus>("disconnect_profile");
       setEngineSnapshot((current) => (current ? { ...current, status } : current));
+      setConnectionMayBeActive(false);
     } catch (disconnectError) {
       setError(String(disconnectError));
+      setConnectionMayBeActive(true);
     } finally {
       setEngineBusy(false);
     }
@@ -155,7 +172,9 @@ function App() {
   async function refreshEngine() {
     if (!engineSnapshot) return;
     try {
-      setEngineSnapshot(await invoke<EngineSnapshot>("engine_snapshot"));
+      const snapshot = await invoke<EngineSnapshot>("engine_snapshot");
+      setEngineSnapshot(snapshot);
+      setConnectionMayBeActive(snapshot.status.state !== "stopped");
     } catch {
       // Preserve the actionable error from the operation that triggered refresh.
     }
@@ -368,9 +387,9 @@ function App() {
                     </div>
 
                     <div className="engine-actions">
-                      {engineSnapshot.status.state === "connected" || engineSnapshot.status.state === "starting" ? (
+                      {canStopEngine(engineSnapshot, connectionMayBeActive) ? (
                         <button className="stop-action" disabled={engineBusy} onClick={disconnectProfile} type="button">
-                          <ActivityIcon /> {engineBusy ? "Stopping…" : "Disconnect"}
+                          <ActivityIcon /> {engineBusy ? "Stopping…" : engineSnapshot.status.state === "failed" ? "Stop engine" : "Disconnect"}
                         </button>
                       ) : (
                         <button
@@ -398,6 +417,8 @@ function App() {
                   <div><dt>Servers</dt><dd>{engineSnapshot?.servers.length ?? 0}</dd></div>
                   <div><dt>Modes</dt><dd>{engineSnapshot?.modes.length ?? 0}</dd></div>
                   <div><dt>Missing helpers</dt><dd className={engineSnapshot?.missingHelpers.length ? "bad" : "good"}>{engineSnapshot?.missingHelpers.length ?? "—"}</dd></div>
+                  <div><dt>Core source</dt><dd>{engineSnapshot ? "Attached runtime" : "—"}</dd></div>
+                  <div><dt>Proxy cores</dt><dd>{engineSnapshot?.proxyCores.join(", ") || "—"}</dd></div>
                 </dl>
                 {engineSnapshot?.missingHelpers.length ? (
                   <div className="helper-warning">

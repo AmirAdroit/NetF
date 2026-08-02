@@ -103,6 +103,15 @@ compatibility phase. In the Servers tab, choose a copied or known-good Netch
 runtime containing `data/settings.json`, `mode/`, and `bin/`. Close the legacy
 Netch process before attaching the same directory.
 
+The engine host is built from this fork, but the attached directory currently
+provides settings, modes, native routing helpers, and proxy-core executables.
+A SOCKS server is used directly without starting a proxy core. For compatible
+VMess/VLESS/Trojan-family profiles, `bin/xray.exe` is preferred when it exists;
+otherwise the compatibility selector retains the attached `v2ray-sn.exe` or
+protocol-specific legacy helper. The Servers health panel reports this core
+inventory explicitly. A future packaged runtime will remove this temporary
+dependency on an existing installation.
+
 Run frontend checks without opening a desktop window:
 
 ```powershell

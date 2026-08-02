@@ -159,7 +159,30 @@ internal static class Program
             .Where(name => !File.Exists(Path.Combine(Global.NetchDir, "bin", name)))
             .ToArray();
 
-        return new { apiVersion = 1, status = state.Snapshot(), servers, modes, missingHelpers };
+        var proxyCores = new List<string> { "direct SOCKS" };
+        foreach (var (fileName, displayName) in new[]
+                 {
+                     ("xray.exe", "Xray"),
+                     ("v2ray-sn.exe", "V2Ray (SagerNet)"),
+                     ("Shadowsocks.exe", "Shadowsocks"),
+                     ("ShadowsocksR.exe", "ShadowsocksR"),
+                     ("Trojan.exe", "Trojan")
+                 })
+        {
+            if (File.Exists(Path.Combine(Global.NetchDir, "bin", fileName)))
+                proxyCores.Add(displayName);
+        }
+
+        return new
+        {
+            apiVersion = 1,
+            status = state.Snapshot(),
+            servers,
+            modes,
+            missingHelpers,
+            coreSource = "attached-runtime",
+            proxyCores
+        };
     }
 
     private static async Task<EngineResponse> ConnectAsync(EngineRequest request, HostState state)

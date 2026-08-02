@@ -23,6 +23,8 @@ export interface EngineSnapshot {
   servers: ServerSummary[];
   modes: ModeSummary[];
   missingHelpers: string[];
+  coreSource: string;
+  proxyCores: string[];
 }
 
 export function modeLabel(mode: ModeSummary): string {
@@ -43,5 +45,15 @@ export function canConnect(
       (snapshot.status.state === "stopped" || snapshot.status.state === "failed") &&
       serverId !== null &&
       modeId !== null,
+  );
+}
+
+export function canStopEngine(
+  snapshot: EngineSnapshot | null,
+  connectionMayBeActive: boolean,
+): boolean {
+  return Boolean(
+    snapshot &&
+      (connectionMayBeActive || snapshot.status.state !== "stopped"),
   );
 }

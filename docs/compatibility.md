@@ -11,8 +11,8 @@ the unfinished 2.0 line and directly descends from that tag.
 | TUN routing | `TUNController` + Wintun/tun2socks + route helper | Connect command wired through headless host | Route/DNS transaction and recovery VM tests |
 | Network sharing | `PcapController` + pcap2socks/Npcap | Headless controller path wired | Npcap dependency and traffic/cleanup VM tests |
 | SOCKS5 server input | Present | Non-secret summary and connect path wired | Real attached-runtime smoke test |
-| SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Legacy provider retained; compatible shapes select pinned Xray `v26.3.27` | Not connected | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
-| SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Retained on `v2ray-sn.exe` | Not connected | Keep fallback until a replacement passes equivalent traffic tests |
+| SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Legacy provider retained; compatible shapes select pinned Xray `v26.3.27` when `xray.exe` is present in the attached runtime | Connect path wired | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
+| SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Retained on attached `v2ray-sn.exe` | Connect path wired | Keep fallback until a replacement passes equivalent traffic tests |
 | Server subscriptions/share links | Present | Not connected | Malicious-input tests and secret-safe diagnostics |
 | Latency and NAT tests | Present | Not connected | Cancellation/timeouts and structured result events |
 | Mode file loading | Text and JSON mode formats | Read-only listing through engine host | Localization fallbacks, malformed corpus, and refresh events |

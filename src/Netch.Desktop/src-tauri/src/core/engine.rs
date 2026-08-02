@@ -4,10 +4,13 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 const MAXIMUM_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAXIMUM_STALE_RESPONSES: usize = 64;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +47,10 @@ pub struct EngineSnapshot {
     pub servers: Vec<ServerSummary>,
     pub modes: Vec<ModeSummary>,
     pub missing_helpers: Vec<String>,
+    #[serde(default)]
+    pub core_source: String,
+    #[serde(default)]
+    pub proxy_cores: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -147,9 +154,15 @@ impl Drop for EngineSupervisor {
 struct EngineProcess {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    responses: Receiver<ProtocolEvent>,
     stderr: Arc<Mutex<String>>,
     next_id: u64,
+}
+
+enum ProtocolEvent {
+    Response(WireResponse),
+    Closed,
+    Failed(String),
 }
 
 impl EngineProcess {
@@ -187,11 +200,12 @@ impl EngineProcess {
                 *target = buffer.chars().take(4096).collect();
             }
         });
+        let responses = spawn_protocol_reader(stdout);
 
         Ok(Self {
             child,
             stdin,
-            stdout: BufReader::new(stdout),
+            responses,
             stderr: stderr_text,
             next_id: 1,
         })
@@ -212,40 +226,43 @@ impl EngineProcess {
             .and_then(|_| self.stdin.flush())
             .map_err(|error| EngineError::Stopped(format!(": {error}")))?;
 
-        let mut line = String::new();
-        let bytes = self
-            .stdout
-            .by_ref()
-            .take(MAXIMUM_RESPONSE_BYTES as u64 + 1)
-            .read_line(&mut line)
-            .map_err(|error| EngineError::Protocol(error.to_string()))?;
-        if bytes == 0 {
-            let diagnostic = self
-                .stderr
-                .lock()
-                .map(|value| value.trim().to_owned())
-                .unwrap_or_default();
-            let suffix = if diagnostic.is_empty() {
-                String::new()
-            } else {
-                format!(": {diagnostic}")
-            };
-            return Err(EngineError::Stopped(suffix));
-        }
-        if bytes > MAXIMUM_RESPONSE_BYTES {
-            return Err(EngineError::Protocol(
-                "engine response exceeded 4 MiB".into(),
-            ));
-        }
+        let timeout = request_timeout(method);
+        let deadline = Instant::now() + timeout;
+        let mut stale_responses = 0;
+        let response = loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(EngineError::Protocol(format!(
+                    "engine did not respond to {method} within {} seconds",
+                    timeout.as_secs()
+                )));
+            }
 
-        let response: WireResponse = serde_json::from_str(&line)
-            .map_err(|error| EngineError::Protocol(format!("invalid response JSON: {error}")))?;
-        if response.id != id {
-            return Err(EngineError::Protocol(format!(
-                "response id {} did not match request id {id}",
-                response.id
-            )));
-        }
+            match self.responses.recv_timeout(remaining) {
+                Ok(ProtocolEvent::Response(response)) if response.id == id => break response,
+                Ok(ProtocolEvent::Response(_)) => {
+                    stale_responses += 1;
+                    if stale_responses > MAXIMUM_STALE_RESPONSES {
+                        return Err(EngineError::Protocol(
+                            "engine produced too many stale protocol responses".into(),
+                        ));
+                    }
+                }
+                Ok(ProtocolEvent::Closed) => return Err(self.stopped_error("")),
+                Ok(ProtocolEvent::Failed(error)) => {
+                    return Err(EngineError::Protocol(format!(
+                        "engine response stream failed: {error}"
+                    )));
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    return Err(EngineError::Protocol(format!(
+                        "engine did not respond to {method} within {} seconds",
+                        timeout.as_secs()
+                    )));
+                }
+                Err(RecvTimeoutError::Disconnected) => return Err(self.stopped_error("")),
+            }
+        };
         if !response.ok {
             let error = response.error.unwrap_or(WireError {
                 code: "unknown".into(),
@@ -265,6 +282,20 @@ impl EngineProcess {
         .map_err(|error| EngineError::Protocol(format!("invalid response shape: {error}")))
     }
 
+    fn stopped_error(&self, prefix: &str) -> EngineError {
+        let diagnostic = self
+            .stderr
+            .lock()
+            .map(|value| value.trim().to_owned())
+            .unwrap_or_default();
+        let suffix = if diagnostic.is_empty() {
+            prefix.to_owned()
+        } else {
+            format!("{prefix}: {diagnostic}")
+        };
+        EngineError::Stopped(suffix)
+    }
+
     fn shutdown(&mut self) {
         if self.child.try_wait().ok().flatten().is_some() {
             return;
@@ -281,6 +312,59 @@ impl EngineProcess {
     }
 }
 
+fn spawn_protocol_reader(stdout: ChildStdout) -> Receiver<ProtocolEvent> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            let read = reader
+                .by_ref()
+                .take(MAXIMUM_RESPONSE_BYTES as u64 + 1)
+                .read_line(&mut line);
+            match read {
+                Ok(0) => {
+                    let _ = sender.send(ProtocolEvent::Closed);
+                    break;
+                }
+                Ok(bytes) if bytes > MAXIMUM_RESPONSE_BYTES => {
+                    let _ = sender.send(ProtocolEvent::Failed(
+                        "engine response exceeded 4 MiB".into(),
+                    ));
+                    break;
+                }
+                Ok(_) => {
+                    // Native legacy DLLs and helper processes can write status text to the
+                    // inherited stdout handle. Only complete, typed protocol envelopes are
+                    // forwarded; all other lines are intentionally discarded.
+                    if let Some(response) = parse_protocol_line(&line)
+                        && sender.send(ProtocolEvent::Response(response)).is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let _ = sender.send(ProtocolEvent::Failed(error.to_string()));
+                    break;
+                }
+            }
+        }
+    });
+    receiver
+}
+
+fn parse_protocol_line(line: &str) -> Option<WireResponse> {
+    serde_json::from_str(line).ok()
+}
+
+fn request_timeout(method: &str) -> Duration {
+    match method {
+        "connect" => Duration::from_secs(60),
+        "disconnect" | "shutdown" => Duration::from_secs(30),
+        _ => Duration::from_secs(10),
+    }
+}
+
 impl Drop for EngineProcess {
     fn drop(&mut self) {
         self.shutdown();
@@ -293,7 +377,7 @@ struct HelloResponse {
     api_version: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct WireResponse {
     id: u64,
     ok: bool,
@@ -301,7 +385,7 @@ struct WireResponse {
     error: Option<WireError>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct WireError {
     code: String,
     message: String,
@@ -409,5 +493,18 @@ mod tests {
         assert_eq!(snapshot.status.state, "stopped");
         assert!(snapshot.servers.is_empty());
         assert!(snapshot.modes.is_empty());
+        assert_eq!(snapshot.core_source, "attached-runtime");
+        assert_eq!(snapshot.proxy_cores, ["direct SOCKS"]);
+    }
+
+    #[test]
+    fn native_stdout_noise_is_not_treated_as_a_protocol_response() {
+        assert!(parse_protocol_line("[Redirector] started\n").is_none());
+
+        let response = parse_protocol_line(
+            r#"{"id":7,"ok":true,"result":{"state":"connected"},"error":null}"#,
+        )
+        .expect("valid protocol response");
+        assert_eq!(response.id, 7);
     }
 }

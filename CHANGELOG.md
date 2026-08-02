@@ -41,6 +41,16 @@ name and compatibility policy.
   configurations, and unsupported Shadowsocks ciphers.
 - Made mode loading and pcap logging usable without constructing WinForms while
   retaining the legacy presentation path.
+- Report the attached runtime's available proxy cores in the modern UI. Direct
+  SOCKS profiles do not launch a core; other profiles use `xray.exe` from the
+  attached runtime when compatible and present, otherwise the legacy provider.
+
+### Fixed
+
+- Ignore legacy native DLL/helper stdout noise in the supervised engine
+  protocol, bound response waits, and keep Stop available when a connection
+  result is uncertain. This prevents a helper log line from wedging Connect and
+  Disconnect with an `invalid response JSON` error.
 
 ### Security
 
@@ -60,8 +70,6 @@ name and compatibility policy.
 
 ### Known limitations
 
-- The modern UI is not connected to the routing engine and cannot replace the
-  legacy client yet.
 - The remaining legacy helper and driver provenance still requires a full
   distribution audit.
 - Current Xray validation covers TCP traffic; UDP, forced-termination cleanup,

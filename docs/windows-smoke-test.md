@@ -24,7 +24,10 @@ would interrupt important work.
    password, UUID, key, or subscription URL.
 6. Confirm **Missing helpers** is zero. If not, stop; the selected runtime is
    incomplete and connection results are not meaningful.
-7. Switch between Servers and Modes, change light/dark/system appearance, and
+7. Confirm **Core source** says **Attached runtime** and the listed proxy cores
+   match the executables in that runtime's `bin` directory. `direct SOCKS` is
+   built into the compatibility engine and does not require a proxy-core process.
+8. Switch between Servers and Modes, change light/dark/system appearance, and
    resize to the minimum supported window. Check for clipped controls,
    horizontal scrolling, or selections that reset unexpectedly.
 
