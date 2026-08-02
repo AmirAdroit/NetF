@@ -23,7 +23,7 @@ public static class MainController
 
     private static readonly AsyncSemaphore Lock = new(1);
 
-    public static async Task StartAsync(Server server, Mode mode)
+    public static async Task StartAsync(Server server, Mode mode, bool headless = false)
     {
         using var releaser = await Lock.EnterAsync();
 
@@ -43,7 +43,7 @@ public static class MainController
 
         try
         {
-            ModeController = ModeService.GetModeControllerByType(mode.Type, out var modePort, out var portName);
+            ModeController = ModeService.GetModeControllerByType(mode.Type, out var modePort, out var portName, headless);
 
             if (modePort != null)
                 TryReleaseTcpPort((ushort)modePort, portName);

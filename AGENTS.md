@@ -30,6 +30,8 @@ desktop workspace.
 - `src/Netch.Desktop/src/`: React presentation and client-side view state only.
 - `src/Netch.Desktop/src-tauri/src/commands/`: narrow IPC command adapters.
 - `src/Netch.Desktop/src-tauri/src/core/`: UI-independent, unit-tested logic.
+- `Netch.EngineHost/`: bounded JSON-line adapter only; do not add general
+  command execution or return raw credentials.
 - `Netch/Forms/`: legacy presentation; new domain logic must not be added here.
 - `Netch/Controllers/`, `Netch/Services/`, `Netch/Interop/`: legacy engine code;
   remove `Global.MainForm` coupling before exposing it through a headless API.
@@ -45,6 +47,8 @@ cd src\Netch.Desktop
 npm run check
 npm run test
 npm run build
+npm run prepare:engine
+npm run tauri:build -- --debug --no-bundle
 ```
 
 Modern Rust adapter:
@@ -89,6 +93,8 @@ dotnet test .\Tests\Tests.csproj -c Release
 - The compatibility application and tests target pinned .NET 10 LTS; remaining
   obsolete API and nullable warnings are tracked modernization debt.
 - Several engine classes directly call WinForms through `Global.MainForm`.
+- The headless bridge supports attach/snapshot/connect/disconnect, but the app
+  remains elevated until a separately authenticated privileged broker exists.
 - The test suite now covers configuration durability and selected proxy-core
   configs/loopback TCP traffic, but still lacks privileged Windows regression
   and recovery coverage.

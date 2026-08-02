@@ -54,7 +54,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -856,6 +857,186 @@ button:disabled {
   line-height: 1.55;
 }
 
+.engine-grid {
+  margin-bottom: 0;
+}
+
+.engine-panel {
+  padding: 24px;
+}
+
+.connection-pill {
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #5f6b65;
+  background: #edf1ee;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.connection-pill.connected {
+  color: #126a42;
+  background: #dcf5e8;
+}
+
+.connection-pill.failed {
+  color: #9b3030;
+  background: #fae8e8;
+}
+
+.connection-pill.starting,
+.connection-pill.stopping {
+  color: #8a5b14;
+  background: #fff0d8;
+}
+
+.attach-runtime {
+  display: grid;
+  min-height: 270px;
+  place-items: center;
+  align-content: center;
+  padding: 28px;
+  border: 1px dashed #cdd9d2;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.attach-runtime > svg {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+  color: var(--accent-dark);
+}
+
+.attach-runtime h3 {
+  margin: 0 0 7px;
+  font-size: 14px;
+}
+
+.attach-runtime p {
+  max-width: 470px;
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.attach-runtime .primary-action {
+  width: auto;
+  min-width: 210px;
+}
+
+.runtime-path {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+}
+
+.runtime-path svg {
+  width: 17px;
+}
+
+.runtime-path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-path button {
+  padding: 5px 8px;
+  border: 0;
+  color: var(--accent-dark);
+  background: transparent;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.profile-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-fields label {
+  display: grid;
+  gap: 7px;
+  color: #39453f;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.profile-fields select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 34px 11px 12px;
+  border: 1px solid #d5ddd8;
+  border-radius: 9px;
+  outline: none;
+  color: var(--ink);
+  background: var(--surface-soft);
+  font-size: 10px;
+}
+
+.profile-fields select:focus {
+  border-color: #76c49c;
+  box-shadow: 0 0 0 3px rgba(41, 166, 111, 0.1);
+}
+
+.engine-actions {
+  margin-top: 20px;
+}
+
+.stop-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: 1px solid #e1b7b7;
+  border-radius: 9px;
+  color: #9d3030;
+  background: #fff3f3;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stop-action svg {
+  width: 15px;
+}
+
+.helper-warning {
+  margin-top: 15px;
+  padding: 12px;
+  border: 1px solid #edc9a0;
+  border-radius: 9px;
+  color: #805419;
+  background: #fff8ee;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.helper-warning p {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+.health-list dd.bad {
+  color: var(--danger);
+}
+
 @media (max-width: 1100px) {
   .hero-meta {
     display: none;
@@ -1059,6 +1240,51 @@ button:disabled {
 :root[data-theme="dark"] .empty-state > span {
   color: #86a798;
   background: #22332b;
+}
+
+:root[data-theme="dark"] .connection-pill {
+  color: #a8b8af;
+  background: #28362f;
+}
+
+:root[data-theme="dark"] .connection-pill.connected {
+  color: #85e6b4;
+  background: #203e30;
+}
+
+:root[data-theme="dark"] .connection-pill.failed {
+  color: #ffaaaa;
+  background: #412627;
+}
+
+:root[data-theme="dark"] .connection-pill.starting,
+:root[data-theme="dark"] .connection-pill.stopping {
+  color: #ebbc74;
+  background: #3b301f;
+}
+
+:root[data-theme="dark"] .attach-runtime,
+:root[data-theme="dark"] .runtime-path,
+:root[data-theme="dark"] .profile-fields select {
+  border-color: #34463e;
+  color: #d7e2dc;
+  background: #111b17;
+}
+
+:root[data-theme="dark"] .profile-fields label {
+  color: #d7e2dc;
+}
+
+:root[data-theme="dark"] .stop-action {
+  border-color: #6a3b3b;
+  color: #ffaaaa;
+  background: #351f20;
+}
+
+:root[data-theme="dark"] .helper-warning {
+  border-color: #654a2b;
+  color: #e4b36c;
+  background: #31281c;
 }
 
 :root[data-theme="dark"] .sidebar {

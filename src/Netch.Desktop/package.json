@@ -7,8 +7,11 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
+    "prepare:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-engine.ps1",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build": "tauri build --features elevated",
+    "tauri:dev": "tauri dev --features elevated"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

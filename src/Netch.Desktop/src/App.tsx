@@ -21,6 +21,13 @@ import {
   type ScanReport,
 } from "./scanner";
 import {
+  canConnect,
+  modeLabel,
+  serverLabel,
+  type EngineSnapshot,
+  type EngineStatus,
+} from "./engine";
+import {
   normalizeThemePreference,
   resolveTheme,
   THEME_STORAGE_KEY,
@@ -29,13 +36,14 @@ import {
 
 const navItems = [
   { label: "Overview", icon: GridIcon, disabled: true },
-  { label: "Servers", icon: ServerIcon, disabled: true },
+  { label: "Servers", icon: ServerIcon, disabled: false },
   { label: "Modes", icon: LayersIcon, disabled: false },
   { label: "Activity", icon: ActivityIcon, disabled: true },
   { label: "Settings", icon: SettingsIcon, disabled: true },
 ];
 
 function App() {
+  const [activeView, setActiveView] = useState<"Servers" | "Modes">("Servers");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY)),
   );
@@ -46,6 +54,11 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [engineSnapshot, setEngineSnapshot] = useState<EngineSnapshot | null>(null);
+  const [runtimeRoot, setRuntimeRoot] = useState("");
+  const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
+  const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
+  const [engineBusy, setEngineBusy] = useState(false);
 
   const summary = summarizeScan(report);
   const rules = useMemo(
@@ -82,6 +95,69 @@ function App() {
       }
     } catch (dialogError) {
       setError(`Could not open the directory picker: ${String(dialogError)}`);
+    }
+  }
+
+  async function attachEngine() {
+    if (engineBusy) return;
+    try {
+      setEngineBusy(true);
+      setError("");
+      const attachment = await invoke<{
+        runtimeRoot: string;
+        snapshot: EngineSnapshot;
+      } | null>("attach_engine");
+      if (!attachment) return;
+      const { runtimeRoot: selected, snapshot } = attachment;
+      setRuntimeRoot(selected);
+      setEngineSnapshot(snapshot);
+      setSelectedServerId(snapshot.servers[0]?.id ?? null);
+      setSelectedModeId(snapshot.modes[0]?.id ?? null);
+    } catch (attachError) {
+      setError(String(attachError));
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function connectProfile() {
+    if (!canConnect(engineSnapshot, selectedServerId, selectedModeId) || engineBusy) return;
+    setEngineBusy(true);
+    setError("");
+    try {
+      const status = await invoke<EngineStatus>("connect_profile", {
+        serverId: selectedServerId,
+        modeId: selectedModeId,
+      });
+      setEngineSnapshot((current) => (current ? { ...current, status } : current));
+    } catch (connectError) {
+      setError(String(connectError));
+      await refreshEngine();
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function disconnectProfile() {
+    if (!engineSnapshot || engineBusy) return;
+    setEngineBusy(true);
+    setError("");
+    try {
+      const status = await invoke<EngineStatus>("disconnect_profile");
+      setEngineSnapshot((current) => (current ? { ...current, status } : current));
+    } catch (disconnectError) {
+      setError(String(disconnectError));
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function refreshEngine() {
+    if (!engineSnapshot) return;
+    try {
+      setEngineSnapshot(await invoke<EngineSnapshot>("engine_snapshot"));
+    } catch {
+      // Preserve the actionable error from the operation that triggered refresh.
     }
   }
 
@@ -140,9 +216,10 @@ function App() {
         <nav className="primary-nav" aria-label="Primary navigation">
           {navItems.map(({ label, icon: Icon, disabled }) => (
             <button
-              className={`nav-item ${label === "Modes" ? "active" : ""}`}
+              className={`nav-item ${label === activeView ? "active" : ""}`}
               disabled={disabled}
               key={label}
+              onClick={() => !disabled && setActiveView(label as "Servers" | "Modes")}
               title={disabled ? `${label} is coming in a later slice` : label}
             >
               <Icon />
@@ -155,11 +232,15 @@ function App() {
         <div className="sidebar-status">
           <div className="status-heading">
             <span className="status-pulse" />
-            Compatibility mode
+            {engineSnapshot ? engineSnapshot.status.state : "Engine detached"}
           </div>
-          <p>The legacy engine is preserved but not connected to this preview.</p>
-          <button type="button" disabled>
-            View engine plan <ChevronIcon />
+          <p>
+            {engineSnapshot
+              ? engineSnapshot.status.message
+              : "Attach a copied or existing Netch runtime to load servers and modes."}
+          </p>
+          <button type="button" onClick={() => setActiveView("Servers")}>
+            Open connection view <ChevronIcon />
           </button>
         </div>
 
@@ -172,8 +253,8 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Process mode</p>
-            <h1>Executable discovery</h1>
+            <p className="eyebrow">{activeView === "Servers" ? "Engine bridge" : "Process mode"}</p>
+            <h1>{activeView === "Servers" ? "Connection control" : "Executable discovery"}</h1>
           </div>
           <div className="topbar-actions">
             <div className="theme-switcher" aria-label="Color theme">
@@ -196,10 +277,143 @@ function App() {
               ))}
             </div>
             <div className="preview-badge">
-              <span /> Preview · configuration writes disabled
+              <span /> {activeView === "Servers" ? "Compatibility engine" : "Preview · configuration writes disabled"}
             </div>
           </div>
         </header>
+
+        {activeView === "Servers" ? (
+          <div className="engine-workspace">
+            <section className="hero-card engine-hero">
+              <div className="hero-copy">
+                <span className="feature-icon"><ServerIcon /></span>
+                <div>
+                  <h2>Run the proven engine behind the modern desktop</h2>
+                  <p>
+                    Attach a Netch installation directory containing <code>data</code>,
+                    <code> mode</code>, and <code> bin</code>. Credentials stay inside the
+                    .NET engine and are never returned to this webview.
+                  </p>
+                </div>
+              </div>
+              <div className="hero-meta">
+                <span>Typed API v1</span>
+                <span>Fixed command allowlist</span>
+                <span>Legacy fallback preserved</span>
+              </div>
+            </section>
+
+            <div className="workspace-grid engine-grid">
+              <section className="panel engine-panel">
+                <div className="panel-heading">
+                  <div>
+                    <span className="step-label">Runtime</span>
+                    <h2>{engineSnapshot ? "Profile selection" : "Attach Netch"}</h2>
+                  </div>
+                  <span className={`connection-pill ${engineSnapshot?.status.state ?? "detached"}`}>
+                    {engineSnapshot?.status.state ?? "detached"}
+                  </span>
+                </div>
+
+                {!engineSnapshot ? (
+                  <div className="attach-runtime">
+                    <FolderIcon />
+                    <h3>Select your working Netch directory</h3>
+                    <p>
+                      Close the old Netch window first. The bridge reads the existing
+                      server and mode configuration; it does not rewrite settings while attaching.
+                    </p>
+                    <button className="primary-action" disabled={engineBusy} onClick={attachEngine} type="button">
+                      <FolderIcon /> {engineBusy ? "Attaching…" : "Choose Netch directory"}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="runtime-path">
+                      <FolderIcon /><span>{runtimeRoot}</span>
+                      <button disabled={engineBusy || engineSnapshot.status.state === "connected"} onClick={attachEngine} type="button">
+                        Change
+                      </button>
+                    </div>
+
+                    <div className="profile-fields">
+                      <label>
+                        Server
+                        <select
+                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
+                          value={selectedServerId ?? ""}
+                          onChange={(event) => setSelectedServerId(Number(event.target.value))}
+                        >
+                          {engineSnapshot.servers.map((server) => (
+                            <option key={server.id} value={server.id}>
+                              [{server.type}] [{server.group}] {serverLabel(server)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Mode
+                        <select
+                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
+                          value={selectedModeId ?? ""}
+                          onChange={(event) => setSelectedModeId(Number(event.target.value))}
+                        >
+                          {engineSnapshot.modes.map((mode) => (
+                            <option key={mode.id} value={mode.id}>
+                              [{mode.type}] {modeLabel(mode)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="engine-actions">
+                      {engineSnapshot.status.state === "connected" || engineSnapshot.status.state === "starting" ? (
+                        <button className="stop-action" disabled={engineBusy} onClick={disconnectProfile} type="button">
+                          <ActivityIcon /> {engineBusy ? "Stopping…" : "Disconnect"}
+                        </button>
+                      ) : (
+                        <button
+                          className="primary-action"
+                          disabled={!canConnect(engineSnapshot, selectedServerId, selectedModeId) || engineBusy}
+                          onClick={connectProfile}
+                          type="button"
+                        >
+                          <ActivityIcon /> {engineBusy ? "Starting…" : "Connect"}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {error && <div className="error-banner" role="alert">{error}</div>}
+              </section>
+
+              <aside className="panel health-panel">
+                <div className="panel-heading compact">
+                  <div><span className="step-label">Engine health</span><h2>Compatibility status</h2></div>
+                </div>
+                <dl className="health-list">
+                  <div><dt>API</dt><dd className="good">{engineSnapshot ? `v${engineSnapshot.apiVersion}` : "Waiting"}</dd></div>
+                  <div><dt>Servers</dt><dd>{engineSnapshot?.servers.length ?? 0}</dd></div>
+                  <div><dt>Modes</dt><dd>{engineSnapshot?.modes.length ?? 0}</dd></div>
+                  <div><dt>Missing helpers</dt><dd className={engineSnapshot?.missingHelpers.length ? "bad" : "good"}>{engineSnapshot?.missingHelpers.length ?? "—"}</dd></div>
+                </dl>
+                {engineSnapshot?.missingHelpers.length ? (
+                  <div className="helper-warning">
+                    <strong>Incomplete runtime</strong>
+                    <p>{engineSnapshot.missingHelpers.join(", ")}</p>
+                  </div>
+                ) : (
+                  <p className="health-explainer">
+                    Attach only a known-good installation. Process, TUN, and sharing modes still require their matching native helpers and administrator access.
+                  </p>
+                )}
+              </aside>
+            </div>
+          </div>
+        ) : (
+          <>
 
         <section className="hero-card">
           <div className="hero-copy">
@@ -287,15 +501,15 @@ function App() {
               </div>
             </div>
             <dl className="health-list">
-              <div><dt>Engine bridge</dt><dd className="muted">Not connected</dd></div>
-              <div><dt>Administrator access</dt><dd className="good">Not requested</dd></div>
+              <div><dt>Engine bridge</dt><dd className="good">Servers tab</dd></div>
+              <div><dt>Administrator access</dt><dd className="muted">Compatibility phase</dd></div>
               <div><dt>Config writes</dt><dd className="good">Disabled</dd></div>
               <div><dt>Remote content</dt><dd className="good">None</dd></div>
             </dl>
             <p className="health-explainer">
-              Privileged networking will be added behind a narrow engine API,
-              with rollback and recovery tests before this preview can replace
-              the legacy client.
+              The narrow engine API is connected. Route and DNS recovery tests
+              are still required before this preview can replace the legacy
+              client for unattended daily use.
             </p>
           </aside>
         </div>
@@ -377,6 +591,8 @@ function App() {
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
     </div>
   );

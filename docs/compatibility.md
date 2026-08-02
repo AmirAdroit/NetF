@@ -7,20 +7,20 @@ the unfinished 2.0 line and directly descends from that tag.
 | Capability | Legacy code in current checkout | Modern desktop | Migration requirement |
 | --- | --- | --- | --- |
 | Process-mode executable scan | Yes; recursive filename rules, 50-result limit | Yes; compatible rules with review, warnings, deterministic output, link protection | Validate against real game/app trees |
-| Process traffic interception | `NFController` + `Redirector.bin` + NetFilter driver | Not connected | Headless engine API and driver lifecycle tests |
-| TUN routing | `TUNController` + Wintun/tun2socks + route helper | Not connected | Route/DNS transaction and recovery tests |
-| Network sharing | `PcapController` + pcap2socks/Npcap | Not connected | Remove WinForms log window coupling |
-| SOCKS5 server input | Present | Not connected | Server model fixtures and IPC contract |
+| Process traffic interception | `NFController` + `Redirector.bin` + NetFilter driver | Connect command wired through headless host | Driver lifecycle, traffic, and crash-recovery VM tests |
+| TUN routing | `TUNController` + Wintun/tun2socks + route helper | Connect command wired through headless host | Route/DNS transaction and recovery VM tests |
+| Network sharing | `PcapController` + pcap2socks/Npcap | Headless controller path wired | Npcap dependency and traffic/cleanup VM tests |
+| SOCKS5 server input | Present | Non-secret summary and connect path wired | Real attached-runtime smoke test |
 | SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Legacy provider retained; compatible shapes select pinned Xray `v26.3.27` | Not connected | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
 | SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Retained on `v2ray-sn.exe` | Not connected | Keep fallback until a replacement passes equivalent traffic tests |
 | Server subscriptions/share links | Present | Not connected | Malicious-input tests and secret-safe diagnostics |
 | Latency and NAT tests | Present | Not connected | Cancellation/timeouts and structured result events |
-| Mode file loading | Text and JSON mode formats | Scan output only | Versioned parser, unknown-field preservation, fixtures |
+| Mode file loading | Text and JSON mode formats | Read-only listing through engine host | Localization fallbacks, malformed corpus, and refresh events |
 | Mode file writing | Present through UI/service | Disabled | Backup, validation, atomic replace, rollback |
 | Settings persistence | `data/settings.json` with validated atomic replacement and `.bak` rollback | Disabled | Add schema versions, copied-install importer, and round-trip corpus |
 | Localization | Existing `Storage/i18n` assets | English preview only | Key inventory and encoding/fallback tests |
 | Tray/autostart/update | Present in legacy UI | Not connected | Signed update design and non-admin UI lifecycle |
-| Bandwidth/status/log UI | Present but coupled to `Global.MainForm` | Boundary status only | Typed engine event stream and secret redaction |
+| Bandwidth/status/log UI | Present but partly coupled to `Global.MainForm` | Start/stop status only | Typed event stream, bandwidth, logs, and secret redaction |
 
 ## Scanner compatibility details
 

@@ -26,12 +26,13 @@ public class ModeService
         return Path.Combine(ModeDirectoryFullName, relativeName);
     }
 
-    public void Load()
+    public void Load(bool notifyPresentation = true)
     {
         Global.Modes.Clear();
         LoadCore(ModeDirectoryFullName);
-        Sort();
-        Global.MainForm.LoadModes();
+        SortCollection();
+        if (notifyPresentation)
+            Global.MainForm.LoadModes();
     }
 
     private void LoadCore(string modeDirectory)
@@ -78,10 +79,11 @@ public class ModeService
         mode.WriteFile();
     }
 
-    public void Sort()
+    public void Sort(bool notifyPresentation = true)
     {
         SortCollection();
-        Global.MainForm.LoadModes();
+        if (notifyPresentation)
+            Global.MainForm.LoadModes();
     }
 
     public static void Delete(Mode mode)
@@ -96,7 +98,11 @@ public class ModeService
             File.Delete(mode.FullName);
     }
 
-    public static IModeController GetModeControllerByType(ModeType type, out ushort? port, out string portName)
+    public static IModeController GetModeControllerByType(
+        ModeType type,
+        out ushort? port,
+        out string portName,
+        bool headless = false)
     {
         port = null;
         portName = string.Empty;
@@ -107,7 +113,7 @@ public class ModeService
             case ModeType.TunMode:
                 return new TUNController();
             case ModeType.ShareMode:
-                return new PcapController();
+                return new PcapController(showLogWindow: !headless);
             default:
                 Log.Error("Unknown Mode Type \"{Type}\"", (int)type);
                 throw new MessageException("Unknown Mode Type");

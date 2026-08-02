@@ -46,13 +46,20 @@ public static class Configuration
             if (await LoadCoreAsync(FileFullName))
                 return;
 
-            Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
-            await LoadCoreAsync(BackupFileFullName);
+            if (File.Exists(BackupFileFullName))
+            {
+                Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
+                if (await LoadCoreAsync(BackupFileFullName))
+                    return;
+            }
+
+            throw new InvalidDataException(
+                $"Neither {FileFullName} nor its backup contains a valid configuration.");
         }
         catch (Exception e)
         {
             Log.Error(e, "Load configuration failed");
-            Environment.Exit(-1);
+            throw;
         }
     }
 

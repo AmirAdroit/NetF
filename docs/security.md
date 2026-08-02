@@ -24,6 +24,8 @@ The practical threat model includes:
 - No remote content is rendered as executable HTML.
 - The frontend receives no general shell or unrestricted filesystem primitive.
 - Every Tauri command validates paths, sizes, counts, enum values, and state.
+- The elevated webview cannot provide an engine executable or runtime path;
+  runtime attachment requires a native Rust-owned folder picker.
 - Sidecar executable names and argument shapes are allowlisted in native code.
 - Secrets are redacted before structured logging and diagnostics export.
 - Configuration writes are backed up, validated, and atomic.
@@ -32,6 +34,10 @@ The practical threat model includes:
   manifest and cryptographic hash verification.
 - Local IPC to an elevated component authenticates the client and applies a
   restrictive Windows ACL.
+
+The current child-stdio bridge does not expose a listening IPC endpoint. When
+the UI and privileged broker are separated, the named-pipe authentication and
+ACL invariant above becomes mandatory before the broker is enabled.
 
 ## Scanner-specific controls
 
@@ -76,4 +82,3 @@ Use disposable Windows VMs with snapshots for tests that mutate the host:
 - metered/offline/multi-NIC/IPv6 scenarios;
 - malicious configuration, subscription, and IPC inputs;
 - verification that diagnostics and logs contain no credentials.
-

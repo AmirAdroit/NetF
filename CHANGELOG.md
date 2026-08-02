@@ -20,6 +20,11 @@ name and compatibility policy.
   packaging, config validation fixtures, and loopback traffic tests.
 - UI-independent engine status observer seam.
 - Atomic JSON persistence helper with backup and failure-preservation tests.
+- Self-contained .NET 10 headless engine host with a bounded, versioned,
+  allowlisted JSON-line protocol.
+- Rust engine supervisor, native-only runtime picker, server/mode summaries,
+  and modern connect/disconnect controls.
+- Real Rust-to-.NET sidecar handshake/snapshot integration test.
 - Architecture, security, compatibility, roadmap, and agent documentation.
 
 ### Changed
@@ -34,6 +39,8 @@ name and compatibility policy.
 - Select Xray only for traffic-tested profile shapes; retain `v2ray-sn.exe` as
   a fail-closed fallback for SSR, SSH, legacy transports, XTLS, SOCKS4a, plugin
   configurations, and unsupported Shadowsocks ciphers.
+- Made mode loading and pcap logging usable without constructing WinForms while
+  retaining the legacy presentation path.
 
 ### Security
 
@@ -45,6 +52,11 @@ name and compatibility policy.
   beside release artifacts.
 - Validate and flush settings before atomic replacement; preserve the previous
   settings as a rollback backup.
+- Prevent the elevated webview from supplying a runtime/helper path: the trusted
+  Rust command obtains the path from a native folder picker and validates the
+  expected runtime shape.
+- Apply administrator elevation only to real Tauri app builds, keeping Rust
+  test executables unelevated.
 
 ### Known limitations
 
@@ -54,3 +66,5 @@ name and compatibility policy.
   distribution audit.
 - Current Xray validation covers TCP traffic; UDP, forced-termination cleanup,
   route/DNS rollback, and clean-VM testing remain release gates.
+- The modern engine bridge can request real connections, but privileged Windows
+  mode parity is not yet certified outside disposable test environments.

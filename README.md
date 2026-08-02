@@ -33,10 +33,15 @@ shell and a UI-independent engine boundary are developed alongside them.
   protocol paths are exercised with local end-to-end proxy traffic tests.
 - Settings saves are flushed, re-read, validated, backed up, and atomically
   replaced instead of modifying the only configuration in place.
+- A self-contained .NET 10 engine host exposes an allowlisted JSON API to the
+  Rust adapter. The modern Servers tab can attach a user-selected Netch runtime,
+  list non-secret server/mode summaries, and request connect/disconnect.
 
-The modern desktop is currently a **functional preview**, not a complete proxy
-client. Starting/stopping routes and editing production configuration will be
-connected only after the privileged engine API is separated from WinForms.
+The modern desktop is currently a **functional compatibility preview**, not yet
+a replacement for a known-good client. The engine bridge is connected, but
+privileged process/TUN/sharing behavior still requires hands-on Windows VM and
+recovery testing. Server editing and production configuration writes remain
+disabled.
 
 ## Architecture
 
@@ -67,6 +72,7 @@ See [architecture](docs/architecture.md), the
 | Path | Purpose |
 | --- | --- |
 | `Netch/` | .NET 10 WinForms compatibility application and engine code |
+| `Netch.EngineHost/` | Headless, versioned JSON-line engine bridge |
 | `Redirector/` | Native process-traffic redirector |
 | `RouteHelper/` | Native Windows route helper |
 | `Other/` | Third-party/core component build scripts |
@@ -88,8 +94,14 @@ See [architecture](docs/architecture.md), the
 ```powershell
 cd src\Netch.Desktop
 npm install
-npm run tauri dev
+npm run tauri:dev
 ```
+
+`tauri:dev` prepares the self-contained engine host and launches the desktop
+with administrator rights, matching the legacy application during this
+compatibility phase. In the Servers tab, choose a copied or known-good Netch
+runtime containing `data/settings.json`, `mode/`, and `bin/`. Close the legacy
+Netch process before attaching the same directory.
 
 Run frontend checks without opening a desktop window:
 
@@ -105,6 +117,17 @@ Run Rust tests:
 cd src\Netch.Desktop\src-tauri
 cargo test
 ```
+
+Build the complete debug executable without an installer:
+
+```powershell
+cd src\Netch.Desktop
+npm run tauri:build -- --debug --no-bundle
+```
+
+The output is `src\Netch.Desktop\src-tauri\target\debug\netch-desktop.exe`.
+See [Windows smoke testing](docs/windows-smoke-test.md) before connecting a
+real profile.
 
 ### Legacy application
 

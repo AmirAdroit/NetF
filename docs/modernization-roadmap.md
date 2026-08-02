@@ -42,12 +42,15 @@ Exit criteria:
 
 ## Phase 2 — Headless engine boundary
 
+Status: **in progress; first attach/snapshot/connect slice implemented**
+
 - Replace `Global.MainForm` calls in controllers/services with typed events and
   interfaces.
 - Move configuration, server, mode, subscription, and connection orchestration
   into UI-independent projects.
 - Maintain the now-upgraded .NET 10 LTS bridge behind compatibility tests.
-- Add versioned local IPC and make Tauri supervise the engine lifecycle.
+- Expand the implemented versioned child-stdio IPC and Tauri lifecycle
+  supervisor with events and recovery records.
 - Add mode read/write with backup, validation, atomic replacement, and rollback.
 
 Exit criteria:

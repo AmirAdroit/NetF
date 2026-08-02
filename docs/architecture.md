@@ -35,13 +35,13 @@ until those calls become events or interfaces.
 ## Target system
 
 ```text
-Tauri / React UI (unprivileged target state)
+Tauri / React UI (currently elevated for parity; unprivileged target state)
   |
   | versioned, typed commands; state and log event channels
   v
 Desktop adapter (Rust)
   |
-  | narrow authenticated local IPC during migration
+  | bounded JSON-line IPC over supervised child stdio during migration
   v
 Netch engine/broker (.NET migration bridge)
   |
@@ -50,8 +50,11 @@ Netch engine/broker (.NET migration bridge)
 Native helpers and Windows networking primitives
 ```
 
-Initially, running the whole application elevated may be necessary for parity
-with upstream. The target security model separates the normal UI from a small
+The compatibility preview currently runs the whole application elevated for
+parity with upstream. Its Rust adapter starts one fixed, bundled engine host;
+the webview receives no shell API and cannot supply the host executable or
+runtime path. The runtime directory comes from an explicit native folder picker.
+The target security model separates the normal UI from a small
 privileged broker. The broker must authenticate its local client, use a named
 pipe ACL restricted to the interactive user and service identity, and expose
 specific operations rather than arbitrary commands.
@@ -95,10 +98,10 @@ specific operations rather than arbitrary commands.
 The IPC contract should be versioned from its first implementation. Candidate
 operations:
 
-- `get_capabilities`, `get_status`, `subscribe_events`;
+- `hello`, `snapshot`, `status` (implemented); typed event streaming planned;
 - `list_servers`, `test_server`, `upsert_server`, `delete_server`;
 - `list_modes`, `scan_executables`, `validate_mode`, `upsert_mode`;
-- `connect(profile)`, `disconnect(reason)`;
+- `connect(server_id, mode_id)`, `disconnect` (implemented for compatibility testing);
 - `get_settings`, `update_settings`;
 - `export_diagnostics(redaction_level)`.
 
@@ -153,4 +156,3 @@ macOS or Linux support until process routing, privilege separation, DNS, route,
 firewall, packaging, and integration tests exist for those platforms. A useful
 near-term form of broader support is protocol/config extensibility on current
 Windows, not a superficial cross-platform window.
-
