@@ -7,7 +7,9 @@ namespace Netch.Servers;
 
 public static class V2rayConfigUtils
 {
-    public static async Task<V2rayConfig> GenerateClientConfigAsync(Server server)
+    public static async Task<V2rayConfig> GenerateClientConfigAsync(
+        Server server,
+        ProxyCoreFlavor coreFlavor = ProxyCoreFlavor.LegacySagerNet)
     {
         var v2rayConfig = new V2rayConfig
         {
@@ -27,12 +29,12 @@ public static class V2rayConfigUtils
             }
         };
 
-        v2rayConfig.outbounds = new[] { await outbound(server) };
+        v2rayConfig.outbounds = new[] { await outbound(server, coreFlavor) };
 
         return v2rayConfig;
     }
 
-    private static async Task<Outbound> outbound(Server server)
+    private static async Task<Outbound> outbound(Server server, ProxyCoreFlavor coreFlavor)
     {
         var outbound = new Outbound
         {
@@ -249,15 +251,38 @@ public static class V2rayConfigUtils
                 break;
             case WireGuardServer wg:
                 outbound.protocol = "wireguard";
-                outbound.settings.address = await server.AutoResolveHostnameAsync();
-                outbound.settings.port = server.Port;
-                outbound.settings.localAddresses = wg.LocalAddresses.SplitOrDefault();
-                outbound.settings.peerPublicKey = wg.PeerPublicKey;
-                outbound.settings.privateKey = wg.PrivateKey;
-                outbound.settings.preSharedKey = wg.PreSharedKey;
                 outbound.settings.mtu = wg.MTU;
 
-                if (Global.Settings.V2RayConfig.TCPFastOpen)
+                if (coreFlavor == ProxyCoreFlavor.Xray)
+                {
+                    var endpointAddress = await server.AutoResolveHostnameAsync();
+                    var endpoint = endpointAddress.Contains(':')
+                        ? $"[{endpointAddress}]:{server.Port}"
+                        : $"{endpointAddress}:{server.Port}";
+
+                    outbound.settings.address = wg.LocalAddresses.SplitOrDefault() ?? Array.Empty<string>();
+                    outbound.settings.secretKey = wg.PrivateKey;
+                    outbound.settings.peers = new[]
+                    {
+                        new WireGuardPeer
+                        {
+                            endpoint = endpoint,
+                            publicKey = wg.PeerPublicKey,
+                            preSharedKey = wg.PreSharedKey ?? string.Empty
+                        }
+                    };
+                }
+                else
+                {
+                    outbound.settings.address = await server.AutoResolveHostnameAsync();
+                    outbound.settings.port = server.Port;
+                    outbound.settings.localAddresses = wg.LocalAddresses.SplitOrDefault();
+                    outbound.settings.peerPublicKey = wg.PeerPublicKey;
+                    outbound.settings.privateKey = wg.PrivateKey;
+                    outbound.settings.preSharedKey = wg.PreSharedKey;
+                }
+
+                if (coreFlavor == ProxyCoreFlavor.LegacySagerNet && Global.Settings.V2RayConfig.TCPFastOpen)
                 {
                     outbound.streamSettings = new StreamSettings
                     {

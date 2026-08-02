@@ -2,6 +2,8 @@ Push-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 
 .\clean.ps1
 
+New-Item -ItemType Directory -Path '.\release' | Out-Null
+
 Set-Location (Split-Path $MyInvocation.MyCommand.Path -Parent)
 Get-ChildItem -Path '.' -Directory | ForEach-Object {
     $name=$_.Name

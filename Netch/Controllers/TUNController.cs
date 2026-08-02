@@ -7,6 +7,7 @@ using Netch.Models;
 using Netch.Models.Modes;
 using Netch.Models.Modes.TunMode;
 using Netch.Servers;
+using Netch.Services;
 using Netch.Utils;
 using static Netch.Interops.tun2socks;
 
@@ -157,7 +158,7 @@ namespace Netch.Controllers
 
         private void SetupRouteTable()
         {
-            Global.MainForm.StatusText(i18N.Translate("Setup Route Table Rule"));
+            EngineEvents.ReportStatus(i18N.Translate("Setup Route Table Rule"));
 
             var tunNetworkInterface = NetworkInterfaceUtils.Get(_tun.InterfaceIndex);
             // Server Address

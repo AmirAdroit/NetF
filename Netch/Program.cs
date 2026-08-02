@@ -104,7 +104,9 @@ public static class Program
         Application.SetHighDpiMode(HighDpiMode.DpiUnawareGdiScaled);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(Global.MainForm);
+        var mainForm = Global.MainForm;
+        EngineEvents.Observer = new MainFormEngineObserver(mainForm);
+        Application.Run(mainForm);
     }
 
 #pragma warning restore VSTHRD002

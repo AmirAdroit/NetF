@@ -103,18 +103,12 @@ public static class Configuration
             await using var _ = await _lock.WriteLockAsync();
             Log.Verbose("Save Configuration");
 
-            if (!Directory.Exists(DataDirectoryFullName))
-                Directory.CreateDirectory(DataDirectoryFullName);
-
-            var tempFile = Path.Combine(DataDirectoryFullName, FileFullName + ".tmp");
-            await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
-            {
-                await JsonSerializer.SerializeAsync(fileStream, Global.Settings, JsonSerializerOptions);
-            }
-
-            await EnsureConfigFileExistsAsync();
-
-            File.Replace(tempFile, FileFullName, BackupFileFullName);
+            await AtomicJsonFile.WriteAsync(
+                FileFullName,
+                BackupFileFullName,
+                Global.Settings,
+                JsonSerializerOptions,
+                CheckSetting);
         }
         catch (Exception e)
         {
@@ -122,11 +116,4 @@ public static class Configuration
         }
     }
 
-    private static async ValueTask EnsureConfigFileExistsAsync()
-    {
-        if (!File.Exists(FileFullName))
-        {
-            await using var fs = new FileStream(FileFullName, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, true);
-        }
-    }
 }

@@ -31,6 +31,7 @@ New-Item -ItemType Directory -Name $OutputPath | Out-Null
 
 Push-Location $OutputPath
 New-Item -ItemType Directory -Name 'bin'  | Out-Null
+New-Item -ItemType Directory -Name 'licenses' | Out-Null
 cp -Recurse -Force '..\Storage\i18n' '.'  | Out-Null
 cp -Recurse -Force '..\Storage\mode' '.'  | Out-Null
 cp -Recurse -Force '..\Storage\stun.txt' 'bin'  | Out-Null
@@ -51,6 +52,7 @@ if ( -Not ( Test-Path '.\Other\release' ) ) {
 cp -Force '.\Other\release\*.bin' "$OutputPath\bin"
 cp -Force '.\Other\release\*.dll' "$OutputPath\bin"
 cp -Force '.\Other\release\*.exe' "$OutputPath\bin"
+cp -Force '.\Other\release\*-LICENSE.txt' "$OutputPath\licenses"
 
 if ( -Not ( Test-Path ".\Netch\bin\$Configuration" ) ) {
 	Write-Host

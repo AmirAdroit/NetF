@@ -16,7 +16,8 @@ shell and a UI-independent engine boundary are developed alongside them.
 
 ## What works today
 
-- The original .NET 6/WinForms application and C++ helpers are preserved.
+- The WinForms compatibility application now targets .NET 10 LTS; its C++
+  helpers and native behavior remain preserved.
 - Existing `Storage/mode` files remain the compatibility format.
 - A new Tauri desktop workspace lives in `src/Netch.Desktop`.
 - The first modern vertical slice scans a directory tree for Windows
@@ -25,6 +26,13 @@ shell and a UI-independent engine boundary are developed alongside them.
   points, reports inaccessible paths, and enforces a configurable result limit.
 - The preview follows the Windows theme by default and also supports persisted
   light or dark appearance overrides.
+- Existing compatible SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard
+  profiles can use the pinned Xray `v26.3.27` provider. Known-incompatible
+  profiles automatically remain on the legacy SagerNet provider.
+- Generated Xray configurations are validated by the real core, and five TCP
+  protocol paths are exercised with local end-to-end proxy traffic tests.
+- Settings saves are flushed, re-read, validated, backed up, and atomically
+  replaced instead of modifying the only configuration in place.
 
 The modern desktop is currently a **functional preview**, not a complete proxy
 client. Starting/stopping routes and editing production configuration will be
@@ -58,7 +66,7 @@ See [architecture](docs/architecture.md), the
 
 | Path | Purpose |
 | --- | --- |
-| `Netch/` | Existing .NET 6 WinForms application |
+| `Netch/` | .NET 10 WinForms compatibility application and engine code |
 | `Redirector/` | Native process-traffic redirector |
 | `RouteHelper/` | Native Windows route helper |
 | `Other/` | Third-party/core component build scripts |
@@ -100,8 +108,8 @@ cargo test
 
 ### Legacy application
 
-The legacy build needs Visual Studio C++ build tools, the .NET SDK matching the
-project, Go, Rust, and the third-party native build dependencies described by
+The compatibility build needs Visual Studio C++ build tools, .NET SDK
+10.0.302 (pinned by `global.json`), Go, Rust, and the native build dependencies described by
 the existing scripts. `build.ps1` downloads and compiles runtime components;
 review it before running it in a trusted environment.
 
@@ -109,16 +117,26 @@ review it before running it in a trusted environment.
 .\build.ps1 -Configuration Release -OutputPath release
 ```
 
-The legacy project targets unsupported .NET 6 and the test project targets
-unsupported .NET 5. Upgrading them is a planned compatibility change, not a
-blind target-framework edit.
+Run the .NET compatibility, provider-config, and loopback traffic tests with a
+checksum-verified Xray binary:
+
+```powershell
+$xray = .\Other\xray-core\fetch.ps1
+$env:NETCH_XRAY_PATH = $xray
+dotnet test .\Tests\Tests.csproj -c Release
+```
+
+The release build packages Xray under its own filename and includes its MPL-2.0
+license. It does not overwrite `v2ray-sn.exe`, so unsupported legacy profile
+shapes retain their existing fallback.
 
 ## Configuration compatibility
 
 Legacy settings are stored under `data/settings.json`; mode definitions live
 under `mode/` in a release and under `Storage/mode/` in this repository. Do not
-point early preview builds at the only copy of a real configuration. Migration
-code must create a backup and use atomic replacement.
+point early preview builds at the only copy of a real configuration.
+Configuration saves create `settings.json.bak`, flush and re-read a temporary
+file in the same directory, validate it, and atomically replace the destination.
 
 The new scanner emits the same kind of C++ regex fragments as the old scanner:
 it uses executable filenames such as `game\.exe`, not absolute paths. A future

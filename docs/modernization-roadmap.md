@@ -46,7 +46,7 @@ Exit criteria:
   interfaces.
 - Move configuration, server, mode, subscription, and connection orchestration
   into UI-independent projects.
-- Upgrade the maintained .NET bridge to .NET 10 LTS after compatibility tests.
+- Maintain the now-upgraded .NET 10 LTS bridge behind compatibility tests.
 - Add versioned local IPC and make Tauri supervise the engine lifecycle.
 - Add mode read/write with backup, validation, atomic replacement, and rollback.
 
@@ -103,11 +103,11 @@ Exit criteria:
 
 ## First backlog after the scanner slice
 
-1. Build a baseline feature matrix from `1.9.7` and current `main`.
-2. Create redacted fixtures for settings, each server type, and each mode type.
-3. Extract status/notification callbacks from `MainController`, `NFController`,
+1. Expand the baseline feature matrix from `1.9.7` and current `main`.
+2. Expand redacted fixtures from the current protocol set to every settings,
+   server, transport, and mode shape.
+3. Finish extracting status/notification callbacks from `MainController`, `NFController`,
    `TUNController`, `PcapController`, `ModeService`, and `Bandwidth`.
 4. Specify `engine-api-v1` messages and connection state transitions.
-5. Add read-only mode listing in the Tauri preview.
+5. Add read-only server/mode listing in the Tauri preview.
 6. Add safe draft saving, then explicit import/export before in-place migration.
-

@@ -57,8 +57,13 @@ public static class MainController
                 // Start Server Controller to get a local socks5 server
                 Log.Debug("Server Information: {Data}", $"{server.Type} {server.MaskedData()}");
 
-                ServerController = new V2rayController();
-                Global.MainForm.StatusText(i18N.TranslateFormat("Starting {0}", ServerController.Name));
+                var xrayAvailable = File.Exists(Path.Combine(Global.NetchDir, "bin", "xray.exe"));
+                var proxyCore = ProxyCoreSelector.Select(server, xrayAvailable);
+                ServerController = proxyCore == ProxyCoreFlavor.Xray
+                    ? new XrayController()
+                    : new V2rayController();
+                Log.Information("Selected {ProxyCore} for {ServerType}", proxyCore, server.Type);
+                EngineEvents.ReportStatus(i18N.TranslateFormat("Starting {0}", ServerController.Name));
 
                 TryReleaseTcpPort(ServerController.Socks5LocalPort(), "Socks5");
                 Socks5Server = await ServerController.StartAsync(server);
@@ -68,7 +73,7 @@ public static class MainController
             }
 
             // Start Mode Controller
-            Global.MainForm.StatusText(i18N.TranslateFormat("Starting {0}", ModeController.Name));
+            EngineEvents.ReportStatus(i18N.TranslateFormat("Starting {0}", ModeController.Name));
 
             await ModeController.StartAsync(Socks5Server, mode);
         }

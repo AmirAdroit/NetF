@@ -11,12 +11,13 @@ the unfinished 2.0 line and directly descends from that tag.
 | TUN routing | `TUNController` + Wintun/tun2socks + route helper | Not connected | Route/DNS transaction and recovery tests |
 | Network sharing | `PcapController` + pcap2socks/Npcap | Not connected | Remove WinForms log window coupling |
 | SOCKS5 server input | Present | Not connected | Server model fixtures and IPC contract |
-| VMess/VLESS/Trojan and related protocols | Routed through bundled proxy cores | Not connected | Core version/provenance audit and compatibility tests |
+| SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Legacy provider retained; compatible shapes select pinned Xray `v26.3.27` | Not connected | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
+| SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Retained on `v2ray-sn.exe` | Not connected | Keep fallback until a replacement passes equivalent traffic tests |
 | Server subscriptions/share links | Present | Not connected | Malicious-input tests and secret-safe diagnostics |
 | Latency and NAT tests | Present | Not connected | Cancellation/timeouts and structured result events |
 | Mode file loading | Text and JSON mode formats | Scan output only | Versioned parser, unknown-field preservation, fixtures |
 | Mode file writing | Present through UI/service | Disabled | Backup, validation, atomic replace, rollback |
-| Settings migration | Existing `data/settings.json` only | Disabled | Schema versions and reversible importer |
+| Settings persistence | `data/settings.json` with validated atomic replacement and `.bak` rollback | Disabled | Add schema versions, copied-install importer, and round-trip corpus |
 | Localization | Existing `Storage/i18n` assets | English preview only | Key inventory and encoding/fallback tests |
 | Tray/autostart/update | Present in legacy UI | Not connected | Signed update design and non-admin UI lifecycle |
 | Bandwidth/status/log UI | Present but coupled to `Global.MainForm` | Boundary status only | Typed engine event stream and secret redaction |
@@ -41,4 +42,3 @@ escape set. Differences are deliberate:
 Before production use, run the scanner against a corpus of copied application
 directories and compare generated rule behavior through the native redirector,
 not only string output.
-

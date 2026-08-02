@@ -8,8 +8,17 @@ namespace Netch.Servers;
 
 public class V2rayController : Guard, IServerController
 {
-    public V2rayController() : base("v2ray-sn.exe")
+    private readonly ProxyCoreFlavor _coreFlavor;
+    private readonly string _name;
+
+    public V2rayController() : this("v2ray-sn.exe", "V2Ray (SagerNet)", ProxyCoreFlavor.LegacySagerNet)
     {
+    }
+
+    protected V2rayController(string executable, string name, ProxyCoreFlavor coreFlavor) : base(executable)
+    {
+        _name = name;
+        _coreFlavor = coreFlavor;
         //if (!Global.Settings.V2RayConfig.XrayCone)
         //    Instance.StartInfo.Environment["XRAY_CONE_DISABLED"] = "true";
     }
@@ -18,7 +27,7 @@ public class V2rayController : Guard, IServerController
 
     protected override IEnumerable<string> FailedKeywords => new[] { "config file not readable", "failed to" };
 
-    public override string Name => "V2Ray (SagerNet)";
+    public override string Name => _name;
 
     public ushort? Socks5LocalPort { get; set; }
 
@@ -28,10 +37,20 @@ public class V2rayController : Guard, IServerController
     {
         await using (var fileStream = new FileStream(Constants.TempConfig, FileMode.Create, FileAccess.Write, FileShare.Read))
         {
-            await JsonSerializer.SerializeAsync(fileStream, await V2rayConfigUtils.GenerateClientConfigAsync(s), Global.NewCustomJsonSerializerOptions());
+            await JsonSerializer.SerializeAsync(
+                fileStream,
+                await V2rayConfigUtils.GenerateClientConfigAsync(s, _coreFlavor),
+                Global.NewCustomJsonSerializerOptions());
         }
 
         await StartGuardAsync("run -c ..\\data\\last.json");
         return new Socks5Server(IPAddress.Loopback.ToString(), this.Socks5LocalPort(), s.Hostname);
+    }
+}
+
+public sealed class XrayController : V2rayController
+{
+    public XrayController() : base("xray.exe", "Xray", ProxyCoreFlavor.Xray)
+    {
     }
 }

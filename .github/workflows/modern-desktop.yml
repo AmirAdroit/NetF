@@ -4,10 +4,22 @@ on:
   push:
     paths:
       - "src/Netch.Desktop/**"
+      - "Netch/**"
+      - "Tests/**"
+      - "Other/xray-core/**"
+      - "third_party/proxy-cores.json"
+      - "common.props"
+      - "global.json"
       - ".github/workflows/modern-desktop.yml"
   pull_request:
     paths:
       - "src/Netch.Desktop/**"
+      - "Netch/**"
+      - "Tests/**"
+      - "Other/xray-core/**"
+      - "third_party/proxy-cores.json"
+      - "common.props"
+      - "global.json"
       - ".github/workflows/modern-desktop.yml"
 
 permissions:
@@ -58,3 +70,30 @@ jobs:
       - name: Test Rust
         working-directory: src/Netch.Desktop/src-tauri
         run: cargo test --locked
+
+  engine:
+    name: .NET compatibility and Xray traffic
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.302
+
+      - name: Fetch checksum-pinned Xray
+        id: xray
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'xray-v26.3.27'
+          $path = .\Other\xray-core\fetch.ps1 -OutputDirectory $output
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Test compatibility engine
+        shell: pwsh
+        env:
+          NETCH_XRAY_PATH: ${{ steps.xray.outputs.path }}
+        run: dotnet test .\Tests\Tests.csproj -c Release --logger "console;verbosity=normal"

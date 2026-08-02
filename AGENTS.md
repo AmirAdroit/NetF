@@ -62,6 +62,14 @@ Legacy release build:
 .\build.ps1 -Configuration Release -OutputPath release
 ```
 
+.NET compatibility and provider tests:
+
+```powershell
+$xray = .\Other\xray-core\fetch.ps1
+$env:NETCH_XRAY_PATH = $xray
+dotnet test .\Tests\Tests.csproj -c Release
+```
+
 ## Definition of done
 
 - Behavior is covered by unit tests; networking changes also have a documented
@@ -78,9 +86,11 @@ Legacy release build:
 
 - The checkout's `main` is the unfinished 2.0 line; tag `1.9.7` is its direct
   ancestor and should be used for behavioral comparisons.
-- The legacy application targets EOL .NET 6 and tests target EOL .NET 5.
+- The compatibility application and tests target pinned .NET 10 LTS; remaining
+  obsolete API and nullable warnings are tracked modernization debt.
 - Several engine classes directly call WinForms through `Global.MainForm`.
-- The existing test suite does not provide meaningful regression coverage.
+- The test suite now covers configuration durability and selected proxy-core
+  configs/loopback TCP traffic, but still lacks privileged Windows regression
+  and recovery coverage.
 - Bundled/prebuilt networking components need a full provenance and licensing
   audit before public distribution.
-
