@@ -9,7 +9,7 @@ namespace Netch.EngineHost;
 
 internal static class Program
 {
-    private const int MaximumRequestCharacters = 64 * 1024;
+    private const int MaximumRequestCharacters = 2 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -79,7 +79,7 @@ internal static class Program
 
             if (line.Length > MaximumRequestCharacters)
             {
-                response = EngineResponse.Failure(0, "request_too_large", "Engine request exceeded 64 KiB.");
+                response = EngineResponse.Failure(0, "request_too_large", "Engine request exceeded 2 MiB.");
             }
             else
             {
@@ -119,20 +119,32 @@ internal static class Program
                 {
                     apiVersion = 1,
                     engine = "netch-dotnet-bridge",
-                    supports = new[] { "snapshot", "status", "connect", "disconnect", "importLegacy", "shutdown" }
+                    supports = new[]
+                    {
+                        "snapshot", "status", "connect", "disconnect", "importLegacy",
+                        "modeDetail", "saveMode", "mergeMode", "logs", "settings",
+                        "updateSettings", "shutdown"
+                    }
                 }),
                 "snapshot" => EngineResponse.Success(request.Id, BuildSnapshot(state)),
                 "status" => EngineResponse.Success(request.Id, state.Snapshot()),
                 "connect" => await ConnectAsync(request, state),
                 "disconnect" => await DisconnectAsync(request.Id, state),
                 "importLegacy" => await ImportLegacyAsync(request, state),
+                "modeDetail" => EngineResponse.Success(request.Id, GetModeDetail(request)),
+                "saveMode" => await SaveModeAsync(request, state),
+                "mergeMode" => await MergeModeAsync(request, state),
+                "logs" => EngineResponse.Success(request.Id, GetLogs(request)),
+                "settings" => EngineResponse.Success(request.Id, EngineSettingsService.Get()),
+                "updateSettings" => await UpdateSettingsAsync(request, state),
                 "shutdown" => EngineResponse.Success(request.Id, state.Snapshot(), shutdown: true),
                 _ => EngineResponse.Failure(request.Id, "unknown_method", "The requested engine method is not allowlisted.")
             };
         }
         catch (Exception exception)
         {
-            state.Failed(exception.Message);
+            if (request.Method is "connect" or "disconnect")
+                state.Failed(exception.Message);
             return EngineResponse.Failure(request.Id, "engine_error", exception.Message);
         }
     }
@@ -146,12 +158,20 @@ internal static class Program
             server.Remark,
             server.Group
         });
-        var modes = Global.Modes.Select((mode, index) => new
+        var modes = Global.Modes.Select((mode, index) =>
         {
-            id = index,
-            type = mode.Type.ToString(),
-            remark = mode.i18NRemark,
-            source = ModeService.Instance.GetRelativePath(mode.FullName)
+            var detail = ModeManagementService.GetDetail(index);
+            return new
+            {
+                id = index,
+                type = mode.Type.ToString(),
+                remark = mode.i18NRemark,
+                source = detail.Source,
+                origin = detail.Origin,
+                editableInPlace = detail.EditableInPlace,
+                handleCount = detail.Handle.Count,
+                bypassCount = detail.Bypass.Count
+            };
         });
 
         var capabilityRequirements = new[]
@@ -247,11 +267,91 @@ internal static class Program
         });
     }
 
+    private static ModeDetail GetModeDetail(EngineRequest request)
+    {
+        var parameters = request.Parameters.Deserialize<ModeIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Mode parameters are required.");
+        return ModeManagementService.GetDetail(parameters.ModeId);
+    }
+
+    private static async Task<EngineResponse> SaveModeAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "editing a mode");
+        var parameters = request.Parameters.Deserialize<SaveModeParameters>(JsonOptions)
+            ?? throw new ArgumentException("Mode edit parameters are required.");
+        var result = await ModeManagementService.SaveAsync(
+            parameters.ModeId,
+            parameters.Type,
+            parameters.Remark,
+            parameters.Handle ?? [],
+            parameters.Bypass ?? []);
+        state.Transition(ConnectionState.Stopped, result.CreatedCopy ? "Custom mode created" : "Mode saved");
+        return EngineResponse.Success(request.Id, new
+        {
+            mode = result.Mode,
+            result.CreatedCopy,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> MergeModeAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "merging modes");
+        var parameters = request.Parameters.Deserialize<MergeModeParameters>(JsonOptions)
+            ?? throw new ArgumentException("Mode merge parameters are required.");
+        var result = await ModeManagementService.MergeAsync(parameters.SourceModeId, parameters.TargetModeId);
+        state.Transition(ConnectionState.Stopped, "Mode rules merged");
+        return EngineResponse.Success(request.Id, new
+        {
+            mode = result.Mode,
+            result.AddedHandleRules,
+            result.AddedBypassRules,
+            result.CreatedCopy,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static EngineLogResult GetLogs(EngineRequest request)
+    {
+        var parameters = request.Parameters.Deserialize<LogParameters>(JsonOptions)
+            ?? new LogParameters(200);
+        return EngineLogService.ReadRecent(parameters.Limit);
+    }
+
+    private static async Task<EngineResponse> UpdateSettingsAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "changing settings");
+        var parameters = request.Parameters.Deserialize<EngineSettingsSnapshot>(JsonOptions)
+            ?? throw new ArgumentException("Settings are required.");
+        var settings = await EngineSettingsService.UpdateAsync(parameters);
+        state.Transition(ConnectionState.Stopped, "Settings saved");
+        return EngineResponse.Success(request.Id, settings);
+    }
+
+    private static void RequireStopped(HostState state, string operation)
+    {
+        if (state.State != ConnectionState.Stopped && state.State != ConnectionState.Failed)
+            throw new InvalidOperationException($"Disconnect before {operation}.");
+    }
+
     private sealed record EngineRequest(long Id, string Method, JsonElement Parameters);
 
     private sealed record ConnectParameters(int ServerId, int ModeId);
 
     private sealed record ImportParameters(string SourceRoot);
+
+    private sealed record ModeIdParameters(int ModeId);
+
+    private sealed record SaveModeParameters(
+        int? ModeId,
+        string Type,
+        string Remark,
+        List<string>? Handle,
+        List<string>? Bypass);
+
+    private sealed record MergeModeParameters(int SourceModeId, int TargetModeId);
+
+    private sealed record LogParameters(int Limit);
 
     private sealed record HostOptions(string RuntimeRoot, string RuntimeKind);
 

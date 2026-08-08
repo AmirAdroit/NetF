@@ -100,6 +100,26 @@ public static class Configuration
         Global.Settings = settings;
     }
 
+    public static async Task UpdateAsync(Action<Setting> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        await using var _ = await _lock.WriteLockAsync();
+
+        var serialized = JsonSerializer.SerializeToUtf8Bytes(Global.Settings, JsonSerializerOptions);
+        var candidate = JsonSerializer.Deserialize<Setting>(serialized, JsonSerializerOptions)
+            ?? throw new InvalidDataException("Configuration clone was empty.");
+        update(candidate);
+        CheckSetting(candidate);
+
+        await AtomicJsonFile.WriteAsync(
+            FileFullName,
+            BackupFileFullName,
+            candidate,
+            JsonSerializerOptions,
+            CheckSetting);
+        Global.Settings = candidate;
+    }
+
     private static void CheckSetting(Setting settings)
     {
         settings.Profiles.RemoveAll(p => p.ServerRemark == string.Empty || p.ModeRemark == string.Empty);

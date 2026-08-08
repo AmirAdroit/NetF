@@ -15,6 +15,34 @@ export interface ModeSummary {
   type: string;
   remark: string;
   source: string;
+  origin: "built-in" | "imported" | "user";
+  editableInPlace: boolean;
+  handleCount: number;
+  bypassCount: number;
+}
+
+export interface ModeDetail extends ModeSummary {
+  handle: string[];
+  bypass: string[];
+}
+
+export interface ModeEditRequest {
+  modeId: number | null;
+  type: "ProcessMode" | "TunMode";
+  remark: string;
+  handle: string[];
+  bypass: string[];
+}
+
+export interface ModeSaveResult {
+  mode: ModeDetail;
+  createdCopy: boolean;
+  snapshot: EngineSnapshot;
+}
+
+export interface ModeMergeResult extends ModeSaveResult {
+  addedHandleRules: number;
+  addedBypassRules: number;
 }
 
 export interface EngineSnapshot {
@@ -45,12 +73,61 @@ export interface LegacyImportResult {
   snapshot: EngineSnapshot;
 }
 
+export interface EngineLogResult {
+  lines: string[];
+  truncated: boolean;
+  source: string;
+}
+
+export interface EngineSettings {
+  localAddress: string;
+  socks5LocalPort: number;
+  httpLocalPort: number;
+  requestTimeout: number;
+  serverTcpPing: boolean;
+  filterTcp: boolean;
+  filterUdp: boolean;
+  filterDns: boolean;
+  handleOnlyDns: boolean;
+  dnsProxy: boolean;
+  dnsHost: string;
+  filterIcmp: boolean;
+  icmpDelay: number;
+  allowInsecure: boolean;
+  useMux: boolean;
+  xrayCone: boolean;
+  tcpFastOpen: boolean;
+}
+
 export function modeLabel(mode: ModeSummary): string {
   return mode.remark.trim() || mode.source.replace(/\.(json|txt)$/i, "");
 }
 
 export function serverLabel(server: ServerSummary): string {
   return server.remark.trim() || `${server.type} server ${server.id + 1}`;
+}
+
+export function filterModes(modes: ModeSummary[], query: string): ModeSummary[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  return [...modes]
+    .filter((mode) =>
+      !normalized ||
+      `${mode.remark} ${mode.source} ${mode.type} ${mode.origin}`
+        .toLocaleLowerCase()
+        .includes(normalized),
+    )
+    .sort((left, right) =>
+      modeLabel(left).localeCompare(modeLabel(right), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      }),
+    );
+}
+
+export function modeOriginLabel(origin: ModeSummary["origin"]): string {
+  if (origin === "built-in") return "Built-in";
+  if (origin === "imported") return "Imported";
+  return "User";
 }
 
 export function canConnect(

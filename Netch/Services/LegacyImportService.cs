@@ -45,13 +45,28 @@ public static class LegacyImportService
         Directory.CreateDirectory(staging);
         try
         {
+            var importedStaging = Path.Combine(staging, "Imported");
             foreach (var sourceMode in modeFiles)
             {
                 var relative = Path.GetRelativePath(customSource, sourceMode);
-                var destination = Path.GetFullPath(Path.Combine(staging, relative));
-                EnsureWithin(staging, destination);
+                var destination = Path.GetFullPath(Path.Combine(importedStaging, relative));
+                EnsureWithin(importedStaging, destination);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 File.Copy(sourceMode, destination, overwrite: false);
+            }
+
+            var ownedUser = Path.Combine(ownedCustom, "User");
+            if (Directory.Exists(ownedUser))
+            {
+                var userFiles = EnumerateAndValidateModes(ownedUser, Path.Combine(owned, "mode"));
+                foreach (var userMode in userFiles)
+                {
+                    var relative = Path.GetRelativePath(ownedUser, userMode);
+                    var destination = Path.GetFullPath(Path.Combine(staging, "User", relative));
+                    EnsureWithin(staging, destination);
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    File.Copy(userMode, destination, overwrite: false);
+                }
             }
 
             Directory.CreateDirectory(backupDirectory);

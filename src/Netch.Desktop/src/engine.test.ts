@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   canConnect,
   canStopEngine,
+  filterModes,
   modeLabel,
+  modeOriginLabel,
   serverLabel,
   type EngineSnapshot,
 } from "./engine";
@@ -11,7 +13,16 @@ const snapshot: EngineSnapshot = {
   apiVersion: 1,
   status: { state: "stopped", message: "Stopped" },
   servers: [{ id: 0, type: "VLESS", remark: "Primary", group: "Default" }],
-  modes: [{ id: 0, type: "ProcessMode", remark: "", source: "Game\\DOOM.txt" }],
+  modes: [{
+    id: 0,
+    type: "ProcessMode",
+    remark: "",
+    source: "Game\\DOOM.txt",
+    origin: "built-in",
+    editableInPlace: false,
+    handleCount: 4,
+    bypassCount: 1,
+  }],
   missingHelpers: [],
   capabilities: [{ name: "Process routing", available: true, missing: [] }],
   coreSource: "attached-runtime",
@@ -44,5 +55,16 @@ describe("engine view model", () => {
         false,
       ),
     ).toBe(true);
+  });
+
+  it("searches all mode metadata and sorts labels alphabetically", () => {
+    const modes = [
+      { ...snapshot.modes[0], id: 2, remark: "zeta", origin: "user" as const },
+      { ...snapshot.modes[0], id: 1, remark: "Alpha", origin: "imported" as const },
+    ];
+
+    expect(filterModes(modes, "").map((mode) => mode.remark)).toEqual(["Alpha", "zeta"]);
+    expect(filterModes(modes, "imported").map((mode) => mode.remark)).toEqual(["Alpha"]);
+    expect(modeOriginLabel(modes[0].origin)).toBe("User");
   });
 });

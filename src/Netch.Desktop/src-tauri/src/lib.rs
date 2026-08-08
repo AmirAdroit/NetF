@@ -24,7 +24,13 @@ pub fn run() {
             commands::import_legacy_configuration,
             commands::engine_snapshot,
             commands::connect_profile,
-            commands::disconnect_profile
+            commands::disconnect_profile,
+            commands::mode_detail,
+            commands::save_mode,
+            commands::merge_modes,
+            commands::engine_logs,
+            commands::engine_settings,
+            commands::update_engine_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Netch desktop preview");

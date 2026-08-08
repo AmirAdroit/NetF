@@ -65,7 +65,13 @@ public class ModeService
     {
         // TODO better sort need to discuss
         // TODO replace Mode Collection type
-        Global.Modes.Sort((a, b) => string.Compare(a.i18NRemark, b.i18NRemark, StringComparison.Ordinal));
+        Global.Modes.Sort((a, b) =>
+        {
+            var byRemark = string.Compare(a.i18NRemark, b.i18NRemark, StringComparison.OrdinalIgnoreCase);
+            return byRemark != 0
+                ? byRemark
+                : string.Compare(a.FullName, b.FullName, StringComparison.OrdinalIgnoreCase);
+        });
     }
 
     public void Add(Mode mode)

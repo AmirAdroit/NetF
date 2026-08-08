@@ -42,7 +42,7 @@ Exit criteria:
 
 ## Phase 2 — Headless engine boundary
 
-Status: **in progress; owned-runtime/import/snapshot/connect slice implemented**
+Status: **in progress; owned-runtime, connect, durable mode/settings, and log slices implemented**
 
 - Replace `Global.MainForm` calls in controllers/services with typed events and
   interfaces.
@@ -52,6 +52,7 @@ Status: **in progress; owned-runtime/import/snapshot/connect slice implemented**
 - Expand the implemented versioned child-stdio IPC and Tauri lifecycle
   supervisor with events and recovery records.
 - Add mode read/write with backup, validation, atomic replacement, and rollback.
+  **Implemented for Process/TUN modes; full corpus and traffic parity remain.**
 
 Exit criteria:
 
@@ -112,5 +113,6 @@ Exit criteria:
 3. Finish extracting status/notification callbacks from `MainController`, `NFController`,
    `TUNController`, `PcapController`, `ModeService`, and `Bandwidth`.
 4. Specify `engine-api-v1` messages and connection state transitions.
-5. Add read-only server/mode listing in the Tauri preview.
-6. Add safe draft saving, then explicit import/export before in-place migration.
+5. Add safe server/profile editing with secret-safe validation and round-trip
+   fixtures; mode editing and legacy import are now implemented.
+6. Add explicit mode/settings export and user-facing rollback controls.

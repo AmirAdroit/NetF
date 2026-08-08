@@ -15,12 +15,12 @@ the unfinished 2.0 line and directly descends from that tag.
 | SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Legacy behavior documented | Disabled when no owned compatibility provider is packaged | Build/audit an owned fallback and retain fail-closed selection |
 | Server subscriptions/share links | Present | Not connected | Malicious-input tests and secret-safe diagnostics |
 | Latency and NAT tests | Present | Not connected | Cancellation/timeouts and structured result events |
-| Mode file loading | Text and JSON mode formats | Read-only listing through engine host | Localization fallbacks, malformed corpus, and refresh events |
-| Mode file writing | Present through UI/service | Disabled | Backup, validation, atomic replace, rollback |
-| Settings persistence | `data/settings.json` with validated atomic replacement and `.bak` rollback | Disabled | Add schema versions, copied-install importer, and round-trip corpus |
+| Mode file loading | Text and JSON mode formats | Typed detail/list API; searchable alphabetical UI with built-in/imported/user origin | Localization fallbacks, malformed full-corpus testing, and event-driven refresh |
+| Mode file writing | Present through UI/service | Process/TUN create/edit, built-in copy-on-customize, compatible merge, `.bak` plus atomic replace | Full corpus round-trip and privileged traffic parity for edited rules |
+| Settings persistence | `data/settings.json` with validated atomic replacement and `.bak` rollback | Typed listener/redirector/DNS/Xray subset enabled with the same durable write policy | Schema versions and broader settings round-trip corpus |
 | Localization | Existing `Storage/i18n` assets | English preview only | Key inventory and encoding/fallback tests |
 | Tray/autostart/update | Present in legacy UI | Not connected | Signed update design and non-admin UI lifecycle |
-| Bandwidth/status/log UI | Present but partly coupled to `Global.MainForm` | Start/stop status only | Typed event stream, bandwidth, logs, and secret redaction |
+| Bandwidth/status/log UI | Present but partly coupled to `Global.MainForm` | Start/stop and readiness overview; bounded sanitized application-log tail | Typed live events, bandwidth, structured diagnostics export |
 
 ## Scanner compatibility details
 

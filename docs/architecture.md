@@ -104,15 +104,19 @@ specific operations rather than arbitrary commands.
 
 ## Engine API shape
 
-The IPC contract should be versioned from its first implementation. Candidate
-operations:
+The versioned IPC contract currently implements:
 
-- `hello`, `snapshot`, `status` (implemented); typed event streaming planned;
-- `list_servers`, `test_server`, `upsert_server`, `delete_server`;
-- `list_modes`, `scan_executables`, `validate_mode`, `upsert_mode`;
-- `connect(server_id, mode_id)`, `disconnect` (implemented for compatibility testing);
-- `get_settings`, `update_settings`;
-- `export_diagnostics(redaction_level)`.
+- `hello`, `snapshot`, and owned-runtime legacy import;
+- `connect(server_id, mode_id)` and `disconnect`;
+- `modeDetail`, `saveMode`, and `mergeMode` for typed Process/TUN rules;
+- `settings` and `updateSettings` for the allowlisted operational subset;
+- `logs` for the bounded, redacted application-log tail.
+
+The Rust/Tauri layer mirrors these as narrow typed commands and selects the
+legacy import folder natively. Planned operations include server/subscription
+editing, latency tests, typed event streaming, bandwidth, and structured
+diagnostics export. Neither layer exposes arbitrary file paths, executables,
+shell commands, helper arguments, or raw credentials to the webview.
 
 Connection state is an explicit state machine:
 

@@ -23,6 +23,7 @@ import {
 import {
   canConnect,
   canStopEngine,
+  filterModes,
   modeLabel,
   serverLabel,
   type EngineSnapshot,
@@ -30,6 +31,10 @@ import {
   type LegacyImportResult,
   type RuntimeInfo,
 } from "./engine";
+import { ActivityView } from "./ActivityView";
+import { ModeManager } from "./ModeManager";
+import { OverviewView } from "./OverviewView";
+import { SettingsView } from "./SettingsView";
 import {
   normalizeThemePreference,
   resolveTheme,
@@ -38,15 +43,25 @@ import {
 } from "./theme";
 
 const navItems = [
-  { label: "Overview", icon: GridIcon, disabled: true },
-  { label: "Servers", icon: ServerIcon, disabled: false },
-  { label: "Modes", icon: LayersIcon, disabled: false },
-  { label: "Activity", icon: ActivityIcon, disabled: true },
-  { label: "Settings", icon: SettingsIcon, disabled: true },
-];
+  { label: "Overview", icon: GridIcon },
+  { label: "Servers", icon: ServerIcon },
+  { label: "Modes", icon: LayersIcon },
+  { label: "Activity", icon: ActivityIcon },
+  { label: "Settings", icon: SettingsIcon },
+] as const;
+
+type ViewName = (typeof navItems)[number]["label"];
+
+const viewHeadings: Record<ViewName, { eyebrow: string; title: string; badge: string }> = {
+  Overview: { eyebrow: "Operational summary", title: "Overview", badge: "Owned runtime" },
+  Servers: { eyebrow: "Engine bridge", title: "Connection control", badge: "Compatibility engine" },
+  Modes: { eyebrow: "Routing library", title: "Modes", badge: "Atomic mode editing" },
+  Activity: { eyebrow: "Diagnostics", title: "Activity and logs", badge: "Sanitized output" },
+  Settings: { eyebrow: "Configuration", title: "Settings", badge: "Validated writes" },
+};
 
 function App() {
-  const [activeView, setActiveView] = useState<"Servers" | "Modes">("Servers");
+  const [activeView, setActiveView] = useState<ViewName>("Overview");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY)),
   );
@@ -65,12 +80,24 @@ function App() {
   const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
   const [engineBusy, setEngineBusy] = useState(true);
   const [connectionMayBeActive, setConnectionMayBeActive] = useState(false);
+  const [connectionModeQuery, setConnectionModeQuery] = useState("");
 
   const summary = summarizeScan(report);
   const rules = useMemo(
     () => selectedRules(report, excludedRules),
     [report, excludedRules],
   );
+  const connectionModes = useMemo(() => {
+    const filtered = filterModes(engineSnapshot?.modes ?? [], connectionModeQuery);
+    const selected = engineSnapshot?.modes.find((mode) => mode.id === selectedModeId);
+    return selected && !filtered.some((mode) => mode.id === selected.id)
+      ? [selected, ...filtered]
+      : filtered;
+  }, [engineSnapshot?.modes, connectionModeQuery, selectedModeId]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [activeView]);
 
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -257,26 +284,24 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand" aria-label="Netch modernization preview">
+        <div className="brand" aria-label="Netch modern desktop">
           <span className="brand-mark">N</span>
           <span className="brand-copy">
             <strong>Netch</strong>
-            <small>modernization preview</small>
+            <small>modern desktop</small>
           </span>
         </div>
 
         <nav className="primary-nav" aria-label="Primary navigation">
-          {navItems.map(({ label, icon: Icon, disabled }) => (
+          {navItems.map(({ label, icon: Icon }) => (
             <button
               className={`nav-item ${label === activeView ? "active" : ""}`}
-              disabled={disabled}
               key={label}
-              onClick={() => !disabled && setActiveView(label as "Servers" | "Modes")}
-              title={disabled ? `${label} is coming in a later slice` : label}
+              onClick={() => setActiveView(label)}
+              title={label}
             >
               <Icon />
               <span>{label}</span>
-              {disabled && <span className="nav-dot" />}
             </button>
           ))}
         </nav>
@@ -305,8 +330,8 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{activeView === "Servers" ? "Engine bridge" : "Process mode"}</p>
-            <h1>{activeView === "Servers" ? "Connection control" : "Executable discovery"}</h1>
+            <p className="eyebrow">{viewHeadings[activeView].eyebrow}</p>
+            <h1>{viewHeadings[activeView].title}</h1>
           </div>
           <div className="topbar-actions">
             <div className="theme-switcher" aria-label="Color theme">
@@ -329,12 +354,14 @@ function App() {
               ))}
             </div>
             <div className="preview-badge">
-              <span /> {activeView === "Servers" ? "Compatibility engine" : "Preview · configuration writes disabled"}
+              <span /> {viewHeadings[activeView].badge}
             </div>
           </div>
         </header>
 
-        {activeView === "Servers" ? (
+        {activeView === "Overview" ? (
+          <OverviewView snapshot={engineSnapshot} runtimeVersion={runtimeVersion} onNavigate={setActiveView} />
+        ) : activeView === "Servers" ? (
           <div className="engine-workspace">
             <section className="hero-card engine-hero">
               <div className="hero-copy">
@@ -401,14 +428,21 @@ function App() {
                       </label>
                       <label>
                         Mode
+                        <input
+                          className="mode-select-search"
+                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
+                          value={connectionModeQuery}
+                          onChange={(event) => setConnectionModeQuery(event.target.value)}
+                          placeholder="Search modes…"
+                        />
                         <select
                           disabled={engineBusy || engineSnapshot.status.state === "connected"}
                           value={selectedModeId ?? ""}
                           onChange={(event) => setSelectedModeId(Number(event.target.value))}
                         >
-                          {engineSnapshot.modes.map((mode) => (
+                          {connectionModes.map((mode) => (
                             <option key={mode.id} value={mode.id}>
-                              [{mode.type}] {modeLabel(mode)}
+                              [{mode.origin}] [{mode.type}] {modeLabel(mode)}
                             </option>
                           ))}
                         </select>
@@ -472,8 +506,18 @@ function App() {
               </aside>
             </div>
           </div>
-        ) : (
+        ) : activeView === "Modes" ? (
           <>
+
+        {engineSnapshot ? (
+          <ModeManager snapshot={engineSnapshot} onSnapshot={(snapshot) => {
+            const selectedSource = engineSnapshot.modes.find((mode) => mode.id === selectedModeId)?.source;
+            setEngineSnapshot(snapshot);
+            setSelectedModeId(snapshot.modes.find((mode) => mode.source === selectedSource)?.id ?? snapshot.modes[0]?.id ?? null);
+          }} />
+        ) : (
+          <section className="panel settings-loading"><LayersIcon /><h2>Preparing mode library…</h2></section>
+        )}
 
         <section className="hero-card">
           <div className="hero-copy">
@@ -547,7 +591,7 @@ function App() {
             <div className="trust-note">
               <strong>No files are modified.</strong>
               <span>
-                This preview reads filenames only. It does not start, inspect, or
+                The scanner reads filenames only. It does not start, inspect, or
                 trust the executables it finds.
               </span>
             </div>
@@ -561,15 +605,15 @@ function App() {
               </div>
             </div>
             <dl className="health-list">
-              <div><dt>Engine bridge</dt><dd className="good">Servers tab</dd></div>
-              <div><dt>Administrator access</dt><dd className="muted">Compatibility phase</dd></div>
-              <div><dt>Config writes</dt><dd className="good">Disabled</dd></div>
+              <div><dt>Engine bridge</dt><dd className="good">Owned runtime</dd></div>
+              <div><dt>Administrator access</dt><dd className="muted">Required for engine</dd></div>
+              <div><dt>Config writes</dt><dd className="good">Atomic + backup</dd></div>
               <div><dt>Remote content</dt><dd className="good">None</dd></div>
             </dl>
             <p className="health-explainer">
-              The narrow engine API is connected. Route and DNS recovery tests
-              are still required before this preview can replace the legacy
-              client for unattended daily use.
+              Mode and settings writes are validated and recoverable. Privileged
+              route and DNS recovery still require the documented Windows smoke
+              test before an unattended release.
             </p>
           </aside>
         </div>
@@ -652,6 +696,10 @@ function App() {
           )}
         </section>
           </>
+        ) : activeView === "Activity" ? (
+          <ActivityView snapshot={engineSnapshot} active />
+        ) : (
+          <SettingsView snapshot={engineSnapshot} active />
         )}
       </main>
     </div>

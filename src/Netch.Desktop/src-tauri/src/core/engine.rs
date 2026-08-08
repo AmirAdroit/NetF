@@ -37,6 +37,87 @@ pub struct ModeSummary {
     pub mode_type: String,
     pub remark: String,
     pub source: String,
+    #[serde(default)]
+    pub origin: String,
+    #[serde(default)]
+    pub editable_in_place: bool,
+    #[serde(default)]
+    pub handle_count: usize,
+    #[serde(default)]
+    pub bypass_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeDetail {
+    pub id: usize,
+    #[serde(rename = "type")]
+    pub mode_type: String,
+    pub remark: String,
+    pub source: String,
+    pub origin: String,
+    pub editable_in_place: bool,
+    pub handle: Vec<String>,
+    pub bypass: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeEditRequest {
+    pub mode_id: Option<usize>,
+    #[serde(rename = "type")]
+    pub mode_type: String,
+    pub remark: String,
+    pub handle: Vec<String>,
+    pub bypass: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeSaveResult {
+    pub mode: ModeDetail,
+    pub created_copy: bool,
+    pub snapshot: EngineSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeMergeResult {
+    pub mode: ModeDetail,
+    pub added_handle_rules: usize,
+    pub added_bypass_rules: usize,
+    pub created_copy: bool,
+    pub snapshot: EngineSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineLogResult {
+    pub lines: Vec<String>,
+    pub truncated: bool,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineSettings {
+    pub local_address: String,
+    pub socks5_local_port: u16,
+    pub http_local_port: u16,
+    pub request_timeout: i32,
+    pub server_tcp_ping: bool,
+    pub filter_tcp: bool,
+    pub filter_udp: bool,
+    pub filter_dns: bool,
+    pub handle_only_dns: bool,
+    pub dns_proxy: bool,
+    pub dns_host: String,
+    pub filter_icmp: bool,
+    pub icmp_delay: i32,
+    pub allow_insecure: bool,
+    pub use_mux: bool,
+    pub xray_cone: bool,
+    pub tcp_fast_open: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -163,6 +244,43 @@ impl EngineSupervisor {
                 json!({ "sourceRoot": source_root.display().to_string() }),
             )
         })
+    }
+
+    pub fn mode_detail(&self, mode_id: usize) -> Result<ModeDetail, EngineError> {
+        self.with_process(|process| process.request("modeDetail", json!({ "modeId": mode_id })))
+    }
+
+    pub fn save_mode(&self, request: ModeEditRequest) -> Result<ModeSaveResult, EngineError> {
+        let value = serde_json::to_value(request)
+            .map_err(|error| EngineError::Protocol(error.to_string()))?;
+        self.with_process(|process| process.request("saveMode", value))
+    }
+
+    pub fn merge_modes(
+        &self,
+        source_mode_id: usize,
+        target_mode_id: usize,
+    ) -> Result<ModeMergeResult, EngineError> {
+        self.with_process(|process| {
+            process.request(
+                "mergeMode",
+                json!({ "sourceModeId": source_mode_id, "targetModeId": target_mode_id }),
+            )
+        })
+    }
+
+    pub fn logs(&self, limit: usize) -> Result<EngineLogResult, EngineError> {
+        self.with_process(|process| process.request("logs", json!({ "limit": limit })))
+    }
+
+    pub fn settings(&self) -> Result<EngineSettings, EngineError> {
+        self.with_process(|process| process.request("settings", json!({})))
+    }
+
+    pub fn update_settings(&self, settings: EngineSettings) -> Result<EngineSettings, EngineError> {
+        let value = serde_json::to_value(settings)
+            .map_err(|error| EngineError::Protocol(error.to_string()))?;
+        self.with_process(|process| process.request("updateSettings", value))
     }
 
     fn with_process<T>(
@@ -398,6 +516,7 @@ fn parse_protocol_line(line: &str) -> Option<WireResponse> {
 fn request_timeout(method: &str) -> Duration {
     match method {
         "connect" | "importLegacy" => Duration::from_secs(60),
+        "saveMode" | "mergeMode" | "updateSettings" => Duration::from_secs(30),
         "disconnect" | "shutdown" => Duration::from_secs(30),
         _ => Duration::from_secs(10),
     }
@@ -587,7 +706,68 @@ mod tests {
         assert_eq!(imported.imported_custom_modes, 1);
         assert_eq!(imported.snapshot.modes.len(), 1);
         assert!(owned.path().join("data/settings.json.bak").is_file());
-        assert!(owned.path().join("mode/Custom/Imported.json").is_file());
+        assert!(
+            owned
+                .path()
+                .join("mode/Custom/Imported/Imported.json")
+                .is_file()
+        );
         assert!(!owned.path().join("bin/untrusted.exe").exists());
+        assert_eq!(imported.snapshot.modes[0].origin, "imported");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn built_in_mode_merge_creates_an_atomic_user_owned_copy() {
+        let owned = tempdir().expect("owned runtime");
+        fs::create_dir_all(owned.path().join("data")).unwrap();
+        fs::create_dir_all(owned.path().join("mode")).unwrap();
+        fs::create_dir_all(owned.path().join("bin")).unwrap();
+        fs::write(owned.path().join("data/settings.json"), "{}").unwrap();
+        fs::write(
+            owned.path().join("mode/Alpha.json"),
+            r#"{
+              "type": "ProcessMode",
+              "remark": { "en": "Alpha" },
+              "handle": ["alpha\\.exe", "common\\.exe"],
+              "bypass": []
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            owned.path().join("mode/Beta.json"),
+            r#"{
+              "type": "ProcessMode",
+              "remark": { "en": "Beta" },
+              "handle": ["common\\.exe"],
+              "bypass": []
+            }"#,
+        )
+        .unwrap();
+
+        let supervisor = EngineSupervisor::default();
+        let snapshot = supervisor.attach(owned.path()).expect("owned engine");
+        let source_id = snapshot
+            .modes
+            .iter()
+            .find(|mode_| mode_.remark == "Alpha")
+            .unwrap()
+            .id;
+        let target_id = snapshot
+            .modes
+            .iter()
+            .find(|mode_| mode_.remark == "Beta")
+            .unwrap()
+            .id;
+
+        let merged = supervisor
+            .merge_modes(source_id, target_id)
+            .expect("mode merge");
+
+        assert!(merged.created_copy);
+        assert_eq!(merged.added_handle_rules, 1);
+        assert_eq!(merged.mode.origin, "user");
+        assert_eq!(merged.mode.handle.len(), 2);
+        assert!(owned.path().join("mode/Custom/User/Beta.json").is_file());
     }
 }

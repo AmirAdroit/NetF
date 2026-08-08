@@ -31,6 +31,18 @@ would interrupt important work.
 8. Switch between Servers and Modes, change light/dark/system appearance, and
    resize to the minimum supported window. Check for clipped controls,
    horizontal scrolling, or selections that reset unexpectedly.
+9. In **Modes**, verify names are alphabetical, search by name/path/type/origin,
+   and confirm the Built-in, Imported, and User badges match their locations.
+10. Save a built-in Process mode and verify a user-owned JSON copy is created
+    while the built-in text template remains unchanged. Edit it again and verify
+    the prior JSON is retained as `.bak`.
+11. Merge a compatible source mode into the copy. Verify handled/bypass rules
+    are deduplicated and an incompatible Process/TUN merge is rejected.
+12. In **Settings**, change a harmless stopped-state option, save, restart, and
+    verify the value persists and `data/settings.json.bak` contains the prior
+    file. Restore the original value before connection testing.
+13. In **Activity**, refresh and copy logs. Confirm the output is bounded and
+    contains no server password, UUID, token, private key, or proxy URI.
 
 ## Connection parity
 

@@ -46,6 +46,57 @@ public static class ModeHelper
         JsonSerializer.Serialize(fs, mode, JsonSerializerOptions);
     }
 
+    public static async Task WriteFileAtomicAsync(
+        this Mode mode,
+        string destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        mode.FullName = Path.GetFullPath(destination);
+        await AtomicJsonFile.WriteAsync<Mode>(
+            mode.FullName,
+            mode.FullName + ".bak",
+            mode,
+            JsonSerializerOptions,
+            ValidateEditableMode,
+            cancellationToken);
+    }
+
+    private static void ValidateEditableMode(Mode mode)
+    {
+        if (mode.Remark.Count == 0 || mode.Remark.Values.All(string.IsNullOrWhiteSpace))
+            throw new InvalidDataException("Mode remark is required.");
+
+        switch (mode)
+        {
+            case Redirector processMode:
+                ValidateRules(processMode.Handle, processMode.Bypass);
+                break;
+            case TunMode tunMode:
+                ValidateRules(tunMode.Handle, tunMode.Bypass);
+                break;
+            case ShareMode:
+                break;
+            default:
+                throw new InvalidDataException("Mode type is not supported.");
+        }
+    }
+
+    private static void ValidateRules(IReadOnlyCollection<string> handle, IReadOnlyCollection<string> bypass)
+    {
+        const int maximumRulesPerList = 10_000;
+        const int maximumRuleLength = 2_048;
+        if (handle.Count > maximumRulesPerList || bypass.Count > maximumRulesPerList)
+            throw new InvalidDataException($"A mode cannot contain more than {maximumRulesPerList} rules per list.");
+
+        foreach (var rule in handle.Concat(bypass))
+        {
+            if (string.IsNullOrWhiteSpace(rule) || rule.Length > maximumRuleLength
+                || rule.Any(character => character is '\r' or '\n' or '\0'))
+                throw new InvalidDataException("Mode rules must be non-empty single-line values no longer than 2048 characters.");
+        }
+    }
+
     private static Mode ReadTxtMode(string file, string modeRoot)
     {
         Mode mode;
@@ -114,7 +165,7 @@ public static class ModeHelper
                     if (includeMode is TunMode tMode)
                     {
                         tunMode.Bypass.AddRange(tMode.Bypass);
-                        tMode.Handle.AddRange(tMode.Handle);
+                        tunMode.Handle.AddRange(tMode.Handle);
                         break;
                     }
 

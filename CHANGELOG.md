@@ -25,6 +25,13 @@ name and compatibility policy.
 - Rust engine supervisor, native-only runtime picker, server/mode summaries,
   and modern connect/disconnect controls.
 - Real Rust-to-.NET sidecar handshake/snapshot integration test.
+- Searchable, alphabetically sorted mode management with built-in/imported/user
+  ownership markers, Process/TUN editing, copy-on-customize, and compatible-mode
+  rule merging.
+- Functional Overview, Activity, and Settings views with runtime readiness,
+  sanitized bounded logs, and validated engine configuration.
+- Development-only Tauri IPC fixture for browser-level UI and responsive-layout
+  regression checks.
 - Architecture, security, compatibility, roadmap, and agent documentation.
 
 ### Changed
@@ -48,6 +55,11 @@ name and compatibility policy.
   up settings/custom modes while refusing to copy legacy executables or helpers.
 - Report owned-runtime version, proxy cores, and per-mode helper capabilities in
   the modern UI. Direct SOCKS profiles do not launch a proxy core.
+- Import legacy custom modes into a distinct `Custom/Imported` directory while
+  preserving modern `Custom/User` modes, and classify older root custom files as
+  imported for compatibility.
+- Keep all mode summaries case-insensitively alphabetized across the engine,
+  Rust adapter, and UI.
 
 ### Fixed
 
@@ -55,6 +67,10 @@ name and compatibility policy.
   protocol, bound response waits, and keep Stop available when a connection
   result is uncertain. This prevents a helper log line from wedging Connect and
   Disconnect with an `invalid response JSON` error.
+- Correct TUN text-template inclusion so included rules populate the destination
+  mode instead of attempting to append the mode to itself.
+- Reset page scroll on navigation so shorter Overview, Activity, and Settings
+  views never open at a stale position inherited from Modes.
 
 ### Security
 
@@ -71,6 +87,10 @@ name and compatibility policy.
   expected runtime shape.
 - Apply administrator elevation only to real Tauri app builds, keeping Rust
   test executables unelevated.
+- Validate rule counts, lengths, names, paths, ports, addresses, and state before
+  mode/settings writes; back up and atomically replace every modified file.
+- Bound log reads and redact proxy URIs, credentials, UUIDs, tokens, private
+  keys, and authorization values before returning diagnostics to the webview.
 
 ### Known limitations
 
@@ -80,3 +100,5 @@ name and compatibility policy.
   route/DNS rollback, and clean-VM testing remain release gates.
 - The modern engine bridge can request real connections, but privileged Windows
   mode parity is not yet certified outside disposable test environments.
+- Share-mode helper arguments remain deliberately read-only, and settings expose
+  a safe operational subset rather than every legacy option.

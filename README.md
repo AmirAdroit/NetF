@@ -37,12 +37,20 @@ shell and a UI-independent engine boundary are developed alongside them.
   Rust adapter. The modern Servers tab runs a versioned fork-owned runtime,
   lists non-secret server/mode summaries, imports legacy data, and requests
   connect/disconnect.
+- The Modes tab searches and sorts the complete library alphabetically, marks
+  built-in, imported, and user-owned modes, and edits Process/TUN rules.
+  Built-ins use copy-on-customize; imported and user modes are backed up and
+  atomically replaced. Compatible modes can be merged with deduplicated rules.
+- Overview reports engine/runtime readiness and mode ownership. Activity shows
+  a bounded, credential-redacted log tail that can be copied for diagnostics.
+- Settings exposes a validated operational subset of listener, redirector,
+  DNS, health-check, and Xray behavior with atomic persistence and rollback.
 
-The modern desktop is currently a **functional compatibility preview**, not yet
+The modern desktop is currently a **functional compatibility build**, not yet
 a replacement for a known-good client. The engine bridge is connected, but
 privileged process/TUN/sharing behavior still requires hands-on Windows VM and
-recovery testing. Server editing and production configuration writes remain
-disabled.
+recovery testing. Server/profile editing remains disabled; mode and the exposed
+settings writes are enabled with validation, backup, and atomic replacement.
 
 ## Architecture
 
@@ -84,7 +92,7 @@ See [architecture](docs/architecture.md), the
 
 ## Prerequisites
 
-### Modern desktop preview
+### Modern desktop
 
 - Windows 10 or later
 - Microsoft C++ Build Tools with **Desktop development with C++**
@@ -173,10 +181,16 @@ under `mode/` in a release and under `Storage/mode/` in this repository. Do not
 point early preview builds at the only copy of a real configuration.
 Configuration saves create `settings.json.bak`, flush and re-read a temporary
 file in the same directory, validate it, and atomically replace the destination.
+Imported modes are kept under `mode/Custom/Imported`; modes created or cloned by
+the modern app live under `mode/Custom/User`. Re-import preserves the user-owned
+directory. Mode updates follow the same backup, temporary-file validation, and
+atomic replacement policy.
 
 The new scanner emits the same kind of C++ regex fragments as the old scanner:
-it uses executable filenames such as `game\.exe`, not absolute paths. A future
-mode editor will make filename-only and path-specific matching explicit.
+it uses executable filenames such as `game\.exe`, not absolute paths. The mode
+editor accepts one rule per line for Process and TUN modes. Share-mode arguments
+remain read-only because exposing arbitrary helper arguments to the webview
+would violate the command boundary.
 
 ## Security and distribution
 

@@ -40,6 +40,19 @@ The current child-stdio bridge does not expose a listening IPC endpoint. When
 the UI and privileged broker are separated, the named-pipe authentication and
 ACL invariant above becomes mandatory before the broker is enabled.
 
+Mode and settings management expose typed fields only. Process and TUN rule
+lists are bounded to 10,000 entries with bounded line lengths, filenames are
+sanitized under owned mode directories, and reparse-point paths are rejected.
+Built-in templates are never overwritten by the UI. Share-mode helper arguments
+are read-only because a generic argument editor would turn the elevated engine
+into an unsafe command-construction surface.
+
+The Activity API reads only a bounded tail of the owned runtime's application
+log. It limits returned lines and bytes and redacts credential-bearing URIs,
+passwords, tokens, UUIDs, private/pre-shared keys, and authorization values
+before data crosses the engine boundary. Sanitization reduces exposure but does
+not replace the release-gate credential-leak tests below.
+
 ## Scanner-specific controls
 
 The new executable scanner:
