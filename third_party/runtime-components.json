@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "redirector",
+      "status": "built-from-repository-source",
+      "source": "Redirector/",
+      "license": "GPL-3.0-only",
+      "outputs": ["Redirector.bin", "nfapi.dll"],
+      "updateProcedure": "Review Redirector ABI changes, build Release x64 with MSBuild, run Windows process-routing integration tests."
+    },
+    {
+      "id": "route-helper",
+      "status": "built-from-repository-source",
+      "source": "RouteHelper/",
+      "license": "GPL-3.0-only",
+      "outputs": ["RouteHelper.bin"],
+      "updateProcedure": "Review route ABI changes, build Release x64 with MSBuild, run route creation and rollback tests in a disposable VM."
+    },
+    {
+      "id": "xray",
+      "status": "checksum-pinned-and-traffic-tested",
+      "manifest": "third_party/proxy-cores.json#xray",
+      "version": "v26.3.27",
+      "license": "MPL-2.0",
+      "updateProcedure": "Update the pinned tag, tag object and archive SHA-256; regenerate configs; run validation and loopback traffic tests."
+    },
+    {
+      "id": "pcap2socks",
+      "status": "checksum-pinned",
+      "version": "v0.6.2",
+      "source": "https://github.com/zhxie/pcap2socks",
+      "license": "MIT",
+      "artifact": {
+        "name": "pcap2socks-v0.6.2-windows-amd64.zip",
+        "url": "https://github.com/zhxie/pcap2socks/releases/download/v0.6.2/pcap2socks-v0.6.2-windows-amd64.zip",
+        "sha256": "59b3a2e5054c5a0252f3ac5f10b2862aa53a91e65b2e56e76d5706838d291953",
+        "executableSha256": "de84f4a32c8c9d4888197345d52ba793e4bdf510614852e76f336f627e43def3"
+      },
+      "updateProcedure": "Audit the upstream release and license, pin archive and executable hashes, then run Npcap sharing traffic and cleanup tests."
+    },
+    {
+      "id": "wintun",
+      "status": "packaged-with-license",
+      "version": "0.14.1",
+      "source": "https://www.wintun.net/",
+      "license": "GPL-2.0 OR custom redistribution terms in packaged license",
+      "sha256": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
+      "updateProcedure": "Use an official Wintun release, retain LICENSE-wintun.txt, pin the DLL hash, and rerun adapter lifecycle tests."
+    },
+    {
+      "id": "tun2socks",
+      "status": "distribution-audit-required",
+      "source": "https://github.com/xjasonlyu/tun2socks",
+      "license": "UNKNOWN-FOR-CURRENT-ARTIFACT",
+      "sha256": "1eaca52e1b73491747df71403fdd1228481c7f43691af623aac29889619f0d23",
+      "updateProcedure": "Replace the inherited binary with a reproducible pinned source build and package the exact upstream license before public release."
+    },
+    {
+      "id": "netfilter2-driver",
+      "status": "distribution-audit-required",
+      "version": "1.6.3.0",
+      "sha256": "4af6f672119f4f13e33b8914630eedea97d299b5c92c2105a4015dd0ca6e933e",
+      "updateProcedure": "Identify exact upstream source, license and driver-signing provenance; ABI-test with nfapi/Redirector before public distribution."
+    }
+  ]
+}

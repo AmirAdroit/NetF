@@ -41,9 +41,13 @@ name and compatibility policy.
   configurations, and unsupported Shadowsocks ciphers.
 - Made mode loading and pcap logging usable without constructing WinForms while
   retaining the legacy presentation path.
-- Report the attached runtime's available proxy cores in the modern UI. Direct
-  SOCKS profiles do not launch a core; other profiles use `xray.exe` from the
-  attached runtime when compatible and present, otherwise the legacy provider.
+- Replace attached-runtime execution with a checksum-manifested, fork-owned
+  runtime in private application data. Compile first-party native helpers and
+  package the pinned Xray core as build inputs.
+- Treat an existing Netch directory only as an import source. Validate and back
+  up settings/custom modes while refusing to copy legacy executables or helpers.
+- Report owned-runtime version, proxy cores, and per-mode helper capabilities in
+  the modern UI. Direct SOCKS profiles do not launch a proxy core.
 
 ### Fixed
 

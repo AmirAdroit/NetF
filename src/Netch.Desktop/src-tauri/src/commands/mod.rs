@@ -1,4 +1,5 @@
-use crate::core::engine::{EngineSnapshot, EngineStatus, EngineSupervisor};
+use crate::core::engine::{EngineSnapshot, EngineStatus, EngineSupervisor, LegacyImportResult};
+use crate::core::runtime::OwnedRuntime;
 use crate::core::scanner::{self, ScanReport};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -6,9 +7,9 @@ use tauri_plugin_dialog::DialogExt;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EngineAttachment {
+pub struct RuntimeInfo {
     runtime_root: String,
-    snapshot: EngineSnapshot,
+    runtime_version: String,
 }
 
 const LEGACY_DEFAULT_MAX_RESULTS: usize = 50;
@@ -30,33 +31,38 @@ pub async fn scan_executables(
 }
 
 #[tauri::command]
-pub async fn attach_engine(
+pub fn runtime_info(state: State<'_, OwnedRuntime>) -> RuntimeInfo {
+    RuntimeInfo {
+        runtime_root: state.root.display().to_string(),
+        runtime_version: state.version.clone(),
+    }
+}
+
+#[tauri::command]
+pub async fn import_legacy_configuration(
     app: AppHandle,
     state: State<'_, Arc<EngineSupervisor>>,
-) -> Result<Option<EngineAttachment>, String> {
+) -> Result<Option<LegacyImportResult>, String> {
     let supervisor = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
         let Some(selected) = app
             .dialog()
             .file()
-            .set_title("Choose a trusted Netch installation")
+            .set_title("Import configuration from an existing Netch installation")
             .blocking_pick_folder()
         else {
             return Ok(None);
         };
-        let runtime_root = selected
+        let source = selected
             .into_path()
-            .map_err(|error| format!("selected runtime path was invalid: {error}"))?;
-        let snapshot = supervisor
-            .attach(&runtime_root)
-            .map_err(|error| error.to_string())?;
-        Ok(Some(EngineAttachment {
-            runtime_root: runtime_root.display().to_string(),
-            snapshot,
-        }))
+            .map_err(|error| format!("selected import path was invalid: {error}"))?;
+        supervisor
+            .import_legacy(source)
+            .map(Some)
+            .map_err(|error| error.to_string())
     })
     .await
-    .map_err(|error| format!("engine attachment task failed: {error}"))?
+    .map_err(|error| format!("legacy import task failed: {error}"))?
 }
 
 #[tauri::command]

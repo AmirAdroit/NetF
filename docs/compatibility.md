@@ -8,11 +8,11 @@ the unfinished 2.0 line and directly descends from that tag.
 | --- | --- | --- | --- |
 | Process-mode executable scan | Yes; recursive filename rules, 50-result limit | Yes; compatible rules with review, warnings, deterministic output, link protection | Validate against real game/app trees |
 | Process traffic interception | `NFController` + `Redirector.bin` + NetFilter driver | Connect command wired through headless host | Driver lifecycle, traffic, and crash-recovery VM tests |
-| TUN routing | `TUNController` + Wintun/tun2socks + route helper | Connect command wired through headless host | Route/DNS transaction and recovery VM tests |
+| TUN routing | Owned Wintun/tun2socks + compiled RouteHelper | Connect command wired through headless host; direct configured-DNS fallback when aiodns is unavailable | Route/DNS transaction and recovery VM tests; restore audited split DNS helper |
 | Network sharing | `PcapController` + pcap2socks/Npcap | Headless controller path wired | Npcap dependency and traffic/cleanup VM tests |
-| SOCKS5 server input | Present | Non-secret summary and connect path wired | Real attached-runtime smoke test |
-| SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Legacy provider retained; compatible shapes select pinned Xray `v26.3.27` when `xray.exe` is present in the attached runtime | Connect path wired | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
-| SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Retained on attached `v2ray-sn.exe` | Connect path wired | Keep fallback until a replacement passes equivalent traffic tests |
+| SOCKS5 server input | Present | Imported into owned runtime; direct connect path wired | Real owned-runtime process-routing smoke test |
+| SOCKS5/Shadowsocks/VMess/VLESS/Trojan/WireGuard | Compatible shapes select packaged pinned Xray `v26.3.27` | Connect path wired | Config validation and TCP loopback traffic pass; add UDP and Windows route tests |
+| SSR/SSH/legacy H2, QUIC, mKCP, XTLS, SOCKS4a | Legacy behavior documented | Disabled when no owned compatibility provider is packaged | Build/audit an owned fallback and retain fail-closed selection |
 | Server subscriptions/share links | Present | Not connected | Malicious-input tests and secret-safe diagnostics |
 | Latency and NAT tests | Present | Not connected | Cancellation/timeouts and structured result events |
 | Mode file loading | Text and JSON mode formats | Read-only listing through engine host | Localization fallbacks, malformed corpus, and refresh events |

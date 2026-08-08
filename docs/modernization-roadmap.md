@@ -42,7 +42,7 @@ Exit criteria:
 
 ## Phase 2 — Headless engine boundary
 
-Status: **in progress; first attach/snapshot/connect slice implemented**
+Status: **in progress; owned-runtime/import/snapshot/connect slice implemented**
 
 - Replace `Global.MainForm` calls in controllers/services with typed events and
   interfaces.

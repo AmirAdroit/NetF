@@ -25,10 +25,10 @@ internal static class Program
 
         try
         {
-            var runtimeRoot = ParseRuntimeRoot(args);
-            var state = new HostState();
+            var options = ParseOptions(args);
+            var state = new HostState(options.RuntimeKind);
             await EngineRuntime.InitializeHeadlessAsync(
-                runtimeRoot,
+                options.RuntimeRoot,
                 Environment.ProcessPath ?? AppContext.BaseDirectory,
                 state);
 
@@ -46,18 +46,27 @@ internal static class Program
         }
     }
 
-    private static string ParseRuntimeRoot(IReadOnlyList<string> args)
+    private static HostOptions ParseOptions(IReadOnlyList<string> args)
     {
         if (args.Count == 0)
-            return AppContext.BaseDirectory;
+            return new HostOptions(AppContext.BaseDirectory, "standalone-runtime");
 
-        if (args.Count != 2 || args[0] != "--runtime-root")
-            throw new ArgumentException("Expected either no arguments or --runtime-root <absolute-directory>.");
+        if (args.Count is not (2 or 4) || args[0] != "--runtime-root")
+            throw new ArgumentException(
+                "Expected --runtime-root <absolute-directory> [--runtime-kind owned-runtime].");
 
         if (!Path.IsPathFullyQualified(args[1]))
             throw new ArgumentException("The runtime root must be an absolute directory.");
 
-        return args[1];
+        var runtimeKind = "external-runtime";
+        if (args.Count == 4)
+        {
+            if (args[2] != "--runtime-kind" || args[3] != "owned-runtime")
+                throw new ArgumentException("The runtime kind was not recognized.");
+            runtimeKind = args[3];
+        }
+
+        return new HostOptions(args[1], runtimeKind);
     }
 
     private static async Task<int> RunProtocolAsync(HostState state)
@@ -110,12 +119,13 @@ internal static class Program
                 {
                     apiVersion = 1,
                     engine = "netch-dotnet-bridge",
-                    supports = new[] { "snapshot", "status", "connect", "disconnect", "shutdown" }
+                    supports = new[] { "snapshot", "status", "connect", "disconnect", "importLegacy", "shutdown" }
                 }),
                 "snapshot" => EngineResponse.Success(request.Id, BuildSnapshot(state)),
                 "status" => EngineResponse.Success(request.Id, state.Snapshot()),
                 "connect" => await ConnectAsync(request, state),
                 "disconnect" => await DisconnectAsync(request.Id, state),
+                "importLegacy" => await ImportLegacyAsync(request, state),
                 "shutdown" => EngineResponse.Success(request.Id, state.Snapshot(), shutdown: true),
                 _ => EngineResponse.Failure(request.Id, "unknown_method", "The requested engine method is not allowlisted.")
             };
@@ -144,20 +154,22 @@ internal static class Program
             source = ModeService.Instance.GetRelativePath(mode.FullName)
         });
 
-        var expectedHelpers = new[]
+        var capabilityRequirements = new[]
         {
-            "v2ray-sn.exe",
-            "Redirector.bin",
-            "RouteHelper.bin",
-            "nfapi.dll",
-            "aiodns.bin",
-            "wintun.dll",
-            "tun2socks.bin",
-            "pcap2socks.exe"
+            (Name: "Process routing", Files: new[] { "Redirector.bin", "nfapi.dll", "nfdriver.sys" }),
+            (Name: "TUN routing", Files: new[] { "RouteHelper.bin", "wintun.dll", "tun2socks.bin" }),
+            (Name: "Split DNS", Files: new[] { "aiodns.bin", "aiodns.conf" }),
+            (Name: "Network sharing", Files: new[] { "pcap2socks.exe" }),
+            (Name: "Legacy protocol fallback", Files: new[] { "v2ray-sn.exe" })
         };
-        var missingHelpers = expectedHelpers
-            .Where(name => !File.Exists(Path.Combine(Global.NetchDir, "bin", name)))
-            .ToArray();
+        var capabilities = capabilityRequirements.Select(capability =>
+        {
+            var missing = capability.Files
+                .Where(name => !File.Exists(Path.Combine(Global.NetchDir, "bin", name)))
+                .ToArray();
+            return new { name = capability.Name, available = missing.Length == 0, missing };
+        }).ToArray();
+        var missingHelpers = capabilities.SelectMany(capability => capability.missing).Distinct().ToArray();
 
         var proxyCores = new List<string> { "direct SOCKS" };
         foreach (var (fileName, displayName) in new[]
@@ -180,7 +192,8 @@ internal static class Program
             servers,
             modes,
             missingHelpers,
-            coreSource = "attached-runtime",
+            capabilities,
+            coreSource = state.RuntimeKind,
             proxyCores
         };
     }
@@ -217,9 +230,30 @@ internal static class Program
         return EngineResponse.Success(requestId, state.Snapshot());
     }
 
+    private static async Task<EngineResponse> ImportLegacyAsync(EngineRequest request, HostState state)
+    {
+        if (state.State != ConnectionState.Stopped && state.State != ConnectionState.Failed)
+            return EngineResponse.Failure(request.Id, "invalid_state", "Disconnect before importing configuration.");
+
+        var parameters = request.Parameters.Deserialize<ImportParameters>(JsonOptions)
+            ?? throw new ArgumentException("Import parameters are required.");
+        var result = await LegacyImportService.ImportAsync(parameters.SourceRoot);
+        state.Transition(ConnectionState.Stopped, "Import completed");
+        return EngineResponse.Success(request.Id, new
+        {
+            importedCustomModes = result.ImportedCustomModes,
+            backupDirectory = result.BackupDirectory,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
     private sealed record EngineRequest(long Id, string Method, JsonElement Parameters);
 
     private sealed record ConnectParameters(int ServerId, int ModeId);
+
+    private sealed record ImportParameters(string SourceRoot);
+
+    private sealed record HostOptions(string RuntimeRoot, string RuntimeKind);
 
     private sealed record EngineError(string Code, string Message);
 
@@ -245,6 +279,13 @@ internal static class Program
     {
         private readonly object _sync = new();
         private string _message = "Stopped";
+
+        public HostState(string runtimeKind)
+        {
+            RuntimeKind = runtimeKind;
+        }
+
+        public string RuntimeKind { get; }
 
         public ConnectionState State { get; private set; } = ConnectionState.Stopped;
 

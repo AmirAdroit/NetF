@@ -53,13 +53,16 @@ Native helpers and Windows networking primitives
 The compatibility preview currently runs the whole application elevated for
 parity with upstream. Its Rust adapter starts one fixed, bundled engine host;
 the webview receives no shell API and cannot supply the host executable or
-runtime path. The runtime directory comes from an explicit native folder picker.
-The host executable is produced by this fork; during the compatibility phase,
-the selected runtime supplies configuration, modes, native DLLs/drivers, and
-proxy-core executables. Native/helper stdout is treated as untrusted noise and
-filtered before typed protocol envelopes reach command handling. Requests have
-operation-specific response deadlines so a damaged helper cannot block the UI
-indefinitely.
+runtime path. Rust verifies a packaged SHA-256 manifest and installs the owned
+runtime into private local application data. Packaged built-in assets are
+upgradeable while mutable settings and custom modes are preserved.
+
+A native folder picker may select an old Netch directory only for import. The
+engine validates and transactionally imports settings and custom modes, creates
+a rollback backup, and never copies or executes the source `bin` directory.
+Native/helper stdout is treated as untrusted noise and filtered before typed
+protocol envelopes reach command handling. Requests have operation-specific
+response deadlines so a damaged helper cannot block the UI indefinitely.
 The target security model separates the normal UI from a small
 privileged broker. The broker must authenticate its local client, use a named
 pipe ACL restricted to the interactive user and service identity, and expose

@@ -93,8 +93,9 @@ dotnet test .\Tests\Tests.csproj -c Release
 - The compatibility application and tests target pinned .NET 10 LTS; remaining
   obsolete API and nullable warnings are tracked modernization debt.
 - Several engine classes directly call WinForms through `Global.MainForm`.
-- The headless bridge supports attach/snapshot/connect/disconnect, but the app
-  remains elevated until a separately authenticated privileged broker exists.
+- The headless bridge supports owned-runtime snapshot/import/connect/disconnect,
+  but the app remains elevated until a separately authenticated privileged
+  broker exists.
 - The test suite now covers configuration durability and selected proxy-core
   configs/loopback TCP traffic, but still lacks privileged Windows regression
   and recovery coverage.

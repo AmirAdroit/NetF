@@ -591,6 +591,17 @@ button:disabled {
   line-height: 1.45;
 }
 
+.success-banner {
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .trust-note {
   display: flex;
   flex-direction: column;

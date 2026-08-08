@@ -13,6 +13,7 @@ const snapshot: EngineSnapshot = {
   servers: [{ id: 0, type: "VLESS", remark: "Primary", group: "Default" }],
   modes: [{ id: 0, type: "ProcessMode", remark: "", source: "Game\\DOOM.txt" }],
   missingHelpers: [],
+  capabilities: [{ name: "Process routing", available: true, missing: [] }],
   coreSource: "attached-runtime",
   proxyCores: ["direct SOCKS", "Xray"],
 };

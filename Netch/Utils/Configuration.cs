@@ -67,14 +67,7 @@ public static class Configuration
     {
         try
         {
-            Setting settings;
-
-            await using (var fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))
-            {
-                settings = (await JsonSerializer.DeserializeAsync<Setting>(fs, JsonSerializerOptions))!;
-            }
-
-            CheckSetting(settings);
+            var settings = await ReadValidatedAsync(filename);
             Global.Settings = settings;
             return true;
         }
@@ -83,6 +76,28 @@ public static class Configuration
             Log.Error(e, "Load configuration file \"{FileName}\" error ", filename);
             return false;
         }
+    }
+
+    public static async Task<Setting> ReadValidatedAsync(string filename)
+    {
+        await using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+        var settings = await JsonSerializer.DeserializeAsync<Setting>(fs, JsonSerializerOptions)
+            ?? throw new InvalidDataException("Configuration was empty.");
+        CheckSetting(settings);
+        return settings;
+    }
+
+    public static async Task ImportAsync(string filename)
+    {
+        var settings = await ReadValidatedAsync(filename);
+        await using var _ = await _lock.WriteLockAsync();
+        await AtomicJsonFile.WriteAsync(
+            FileFullName,
+            BackupFileFullName,
+            settings,
+            JsonSerializerOptions,
+            CheckSetting);
+        Global.Settings = settings;
     }
 
     private static void CheckSetting(Setting settings)

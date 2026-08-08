@@ -23,8 +23,26 @@ export interface EngineSnapshot {
   servers: ServerSummary[];
   modes: ModeSummary[];
   missingHelpers: string[];
+  capabilities: RuntimeCapability[];
   coreSource: string;
   proxyCores: string[];
+}
+
+export interface RuntimeCapability {
+  name: string;
+  available: boolean;
+  missing: string[];
+}
+
+export interface RuntimeInfo {
+  runtimeRoot: string;
+  runtimeVersion: string;
+}
+
+export interface LegacyImportResult {
+  importedCustomModes: number;
+  backupDirectory: string;
+  snapshot: EngineSnapshot;
 }
 
 export function modeLabel(mode: ModeSummary): string {

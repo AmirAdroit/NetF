@@ -48,9 +48,27 @@ pub struct EngineSnapshot {
     pub modes: Vec<ModeSummary>,
     pub missing_helpers: Vec<String>,
     #[serde(default)]
+    pub capabilities: Vec<RuntimeCapability>,
+    #[serde(default)]
     pub core_source: String,
     #[serde(default)]
     pub proxy_cores: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCapability {
+    pub name: String,
+    pub available: bool,
+    pub missing: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyImportResult {
+    pub imported_custom_modes: usize,
+    pub backup_directory: String,
+    pub snapshot: EngineSnapshot,
 }
 
 #[derive(Debug, Error)]
@@ -129,6 +147,24 @@ impl EngineSupervisor {
         self.with_process(|process| process.request("disconnect", json!({})))
     }
 
+    pub fn import_legacy(
+        &self,
+        source_root: impl AsRef<Path>,
+    ) -> Result<LegacyImportResult, EngineError> {
+        let source_root = fs::canonicalize(source_root.as_ref())
+            .map_err(|error| EngineError::InvalidRuntime(error.to_string()))?;
+        self.with_process(|process| {
+            let status: EngineStatus = process.request("status", json!({}))?;
+            if status.state != "stopped" && status.state != "failed" {
+                return Err(EngineError::ActiveRuntime);
+            }
+            process.request(
+                "importLegacy",
+                json!({ "sourceRoot": source_root.display().to_string() }),
+            )
+        })
+    }
+
     fn with_process<T>(
         &self,
         action: impl FnOnce(&mut EngineProcess) -> Result<T, EngineError>,
@@ -170,6 +206,8 @@ impl EngineProcess {
         let mut child = Command::new(host_path)
             .arg("--runtime-root")
             .arg(runtime_root)
+            .arg("--runtime-kind")
+            .arg("owned-runtime")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -359,7 +397,7 @@ fn parse_protocol_line(line: &str) -> Option<WireResponse> {
 
 fn request_timeout(method: &str) -> Duration {
     match method {
-        "connect" => Duration::from_secs(60),
+        "connect" | "importLegacy" => Duration::from_secs(60),
         "disconnect" | "shutdown" => Duration::from_secs(30),
         _ => Duration::from_secs(10),
     }
@@ -493,8 +531,14 @@ mod tests {
         assert_eq!(snapshot.status.state, "stopped");
         assert!(snapshot.servers.is_empty());
         assert!(snapshot.modes.is_empty());
-        assert_eq!(snapshot.core_source, "attached-runtime");
+        assert_eq!(snapshot.core_source, "owned-runtime");
         assert_eq!(snapshot.proxy_cores, ["direct SOCKS"]);
+        assert!(
+            snapshot
+                .capabilities
+                .iter()
+                .any(|capability| capability.name == "Process routing")
+        );
     }
 
     #[test]
@@ -506,5 +550,44 @@ mod tests {
         )
         .expect("valid protocol response");
         assert_eq!(response.id, 7);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn owned_engine_imports_only_legacy_configuration_and_custom_modes() {
+        let owned = tempdir().expect("owned runtime");
+        fs::create_dir_all(owned.path().join("data")).unwrap();
+        fs::create_dir_all(owned.path().join("mode/Custom")).unwrap();
+        fs::create_dir_all(owned.path().join("bin")).unwrap();
+        fs::write(owned.path().join("data/settings.json"), "{}").unwrap();
+
+        let legacy = tempdir().expect("legacy import source");
+        fs::create_dir_all(legacy.path().join("data")).unwrap();
+        fs::create_dir_all(legacy.path().join("mode/Custom")).unwrap();
+        fs::write(legacy.path().join("data/settings.json"), "{}").unwrap();
+        fs::write(
+            legacy.path().join("mode/Custom/Imported.json"),
+            r#"{
+              "type": "ProcessMode",
+              "remark": { "en-US": "Imported game" },
+              "handle": ["game\\.exe"],
+              "bypass": []
+            }"#,
+        )
+        .unwrap();
+        fs::create_dir_all(legacy.path().join("bin")).unwrap();
+        fs::write(legacy.path().join("bin/untrusted.exe"), "must not copy").unwrap();
+
+        let supervisor = EngineSupervisor::default();
+        supervisor.attach(owned.path()).expect("owned engine");
+        let imported = supervisor
+            .import_legacy(legacy.path())
+            .expect("validated import");
+
+        assert_eq!(imported.imported_custom_modes, 1);
+        assert_eq!(imported.snapshot.modes.len(), 1);
+        assert!(owned.path().join("data/settings.json.bak").is_file());
+        assert!(owned.path().join("mode/Custom/Imported.json").is_file());
+        assert!(!owned.path().join("bin/untrusted.exe").exists());
     }
 }

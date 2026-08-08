@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
     "prepare:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-engine.ps1",
+    "prepare:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1",
+    "prepare:desktop": "npm run prepare:engine && npm run prepare:runtime",
     "test": "vitest run",
     "tauri": "tauri",
     "tauri:build": "tauri build --features elevated",

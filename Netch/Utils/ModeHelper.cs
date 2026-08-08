@@ -21,13 +21,13 @@ public static class ModeHelper
         JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
     }
 
-    public static Mode LoadMode(string file)
+    public static Mode LoadMode(string file, string? modeRoot = null)
     {
         if (file.EndsWith(".json"))
             return LoadJsonMode(file);
 
         if (file.EndsWith(".txt"))
-            return ReadTxtMode(file);
+            return ReadTxtMode(file, modeRoot ?? ModeService.Instance.ModeDirectoryFullName);
 
         throw new NotSupportedException();
     }
@@ -46,7 +46,7 @@ public static class ModeHelper
         JsonSerializer.Serialize(fs, mode, JsonSerializerOptions);
     }
 
-    private static Mode ReadTxtMode(string file)
+    private static Mode ReadTxtMode(string file, string modeRoot)
     {
         Mode mode;
         var ls = File.ReadAllLines(file);
@@ -86,7 +86,11 @@ public static class ModeHelper
             if (l.StartsWith("#include"))
             {
                 var relativePath = l["#include ".Length..].Replace("<", "").Replace(">", "").Replace(".h", ".txt").Trim();
-                includeMode = ReadTxtMode(ModeService.Instance.GetFullPath(relativePath));
+                var includePath = Path.GetFullPath(Path.Combine(modeRoot, relativePath));
+                var resolvedModeRoot = Path.GetFullPath(modeRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (!includePath.StartsWith(resolvedModeRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Mode include escaped the mode directory.");
+                includeMode = ReadTxtMode(includePath, modeRoot);
             }
 
             switch (mode)

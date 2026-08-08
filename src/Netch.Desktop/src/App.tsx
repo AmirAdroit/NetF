@@ -27,6 +27,8 @@ import {
   serverLabel,
   type EngineSnapshot,
   type EngineStatus,
+  type LegacyImportResult,
+  type RuntimeInfo,
 } from "./engine";
 import {
   normalizeThemePreference,
@@ -57,9 +59,11 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [engineSnapshot, setEngineSnapshot] = useState<EngineSnapshot | null>(null);
   const [runtimeRoot, setRuntimeRoot] = useState("");
+  const [runtimeVersion, setRuntimeVersion] = useState("");
+  const [importSummary, setImportSummary] = useState("");
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
-  const [engineBusy, setEngineBusy] = useState(false);
+  const [engineBusy, setEngineBusy] = useState(true);
   const [connectionMayBeActive, setConnectionMayBeActive] = useState(false);
 
   const summary = summarizeScan(report);
@@ -86,6 +90,35 @@ function App() {
     return () => systemTheme.removeEventListener("change", applyTheme);
   }, [themePreference]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOwnedRuntime() {
+      try {
+        const [runtime, snapshot] = await Promise.all([
+          invoke<RuntimeInfo>("runtime_info"),
+          invoke<EngineSnapshot>("engine_snapshot"),
+        ]);
+        if (cancelled) return;
+        setRuntimeRoot(runtime.runtimeRoot);
+        setRuntimeVersion(runtime.runtimeVersion);
+        setEngineSnapshot(snapshot);
+        setConnectionMayBeActive(snapshot.status.state !== "stopped");
+        setSelectedServerId(snapshot.servers[0]?.id ?? null);
+        setSelectedModeId(snapshot.modes[0]?.id ?? null);
+      } catch (startupError) {
+        if (!cancelled) setError(String(startupError));
+      } finally {
+        if (!cancelled) setEngineBusy(false);
+      }
+    }
+
+    void loadOwnedRuntime();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function chooseFolder() {
     try {
       const selected = await open({ directory: true, multiple: false });
@@ -100,24 +133,24 @@ function App() {
     }
   }
 
-  async function attachEngine() {
+  async function importLegacyConfiguration() {
     if (engineBusy) return;
     try {
       setEngineBusy(true);
       setError("");
-      const attachment = await invoke<{
-        runtimeRoot: string;
-        snapshot: EngineSnapshot;
-      } | null>("attach_engine");
-      if (!attachment) return;
-      const { runtimeRoot: selected, snapshot } = attachment;
-      setRuntimeRoot(selected);
-      setEngineSnapshot(snapshot);
-      setConnectionMayBeActive(snapshot.status.state !== "stopped");
-      setSelectedServerId(snapshot.servers[0]?.id ?? null);
-      setSelectedModeId(snapshot.modes[0]?.id ?? null);
-    } catch (attachError) {
-      setError(String(attachError));
+      const imported = await invoke<LegacyImportResult | null>(
+        "import_legacy_configuration",
+      );
+      if (!imported) return;
+      setEngineSnapshot(imported.snapshot);
+      setConnectionMayBeActive(false);
+      setSelectedServerId(imported.snapshot.servers[0]?.id ?? null);
+      setSelectedModeId(imported.snapshot.modes[0]?.id ?? null);
+      setImportSummary(
+        `Imported ${imported.snapshot.servers.length} server(s) and ${imported.importedCustomModes} custom mode(s). A rollback backup was created.`,
+      );
+    } catch (importError) {
+      setError(String(importError));
     } finally {
       setEngineBusy(false);
     }
@@ -256,7 +289,7 @@ function App() {
           <p>
             {engineSnapshot
               ? engineSnapshot.status.message
-              : "Attach a copied or existing Netch runtime to load servers and modes."}
+              : "Preparing the fork-owned runtime and verified proxy cores."}
           </p>
           <button type="button" onClick={() => setActiveView("Servers")}>
             Open connection view <ChevronIcon />
@@ -309,9 +342,9 @@ function App() {
                 <div>
                   <h2>Run the proven engine behind the modern desktop</h2>
                   <p>
-                    Attach a Netch installation directory containing <code>data</code>,
-                    <code> mode</code>, and <code> bin</code>. Credentials stay inside the
-                    .NET engine and are never returned to this webview.
+                    The fork runs its own versioned runtime and verified cores. Import
+                    configuration from an older Netch installation without executing any
+                    binaries from that directory. Credentials stay inside the .NET engine.
                   </p>
                 </div>
               </div>
@@ -337,21 +370,17 @@ function App() {
                 {!engineSnapshot ? (
                   <div className="attach-runtime">
                     <FolderIcon />
-                    <h3>Select your working Netch directory</h3>
+                    <h3>Owned runtime is starting</h3>
                     <p>
-                      Close the old Netch window first. The bridge reads the existing
-                      server and mode configuration; it does not rewrite settings while attaching.
+                      The app is validating and installing its packaged engine assets.
                     </p>
-                    <button className="primary-action" disabled={engineBusy} onClick={attachEngine} type="button">
-                      <FolderIcon /> {engineBusy ? "Attaching…" : "Choose Netch directory"}
-                    </button>
                   </div>
                 ) : (
                   <>
                     <div className="runtime-path">
                       <FolderIcon /><span>{runtimeRoot}</span>
-                      <button disabled={engineBusy || engineSnapshot.status.state === "connected"} onClick={attachEngine} type="button">
-                        Change
+                      <button disabled={engineBusy || engineSnapshot.status.state !== "stopped"} onClick={importLegacyConfiguration} type="button">
+                        Import
                       </button>
                     </div>
 
@@ -406,6 +435,7 @@ function App() {
                 )}
 
                 {error && <div className="error-banner" role="alert">{error}</div>}
+                {importSummary && <div className="success-banner" role="status">{importSummary}</div>}
               </section>
 
               <aside className="panel health-panel">
@@ -416,18 +446,27 @@ function App() {
                   <div><dt>API</dt><dd className="good">{engineSnapshot ? `v${engineSnapshot.apiVersion}` : "Waiting"}</dd></div>
                   <div><dt>Servers</dt><dd>{engineSnapshot?.servers.length ?? 0}</dd></div>
                   <div><dt>Modes</dt><dd>{engineSnapshot?.modes.length ?? 0}</dd></div>
-                  <div><dt>Missing helpers</dt><dd className={engineSnapshot?.missingHelpers.length ? "bad" : "good"}>{engineSnapshot?.missingHelpers.length ?? "—"}</dd></div>
-                  <div><dt>Core source</dt><dd>{engineSnapshot ? "Attached runtime" : "—"}</dd></div>
+                  <div><dt>Optional helpers missing</dt><dd className={engineSnapshot?.missingHelpers.length ? "bad" : "good"}>{engineSnapshot?.missingHelpers.length ?? "—"}</dd></div>
+                  <div><dt>Runtime</dt><dd>{runtimeVersion ? `Owned v${runtimeVersion}` : "—"}</dd></div>
+                  <div><dt>Core source</dt><dd>{engineSnapshot ? "Fork package" : "—"}</dd></div>
                   <div><dt>Proxy cores</dt><dd>{engineSnapshot?.proxyCores.join(", ") || "—"}</dd></div>
                 </dl>
                 {engineSnapshot?.missingHelpers.length ? (
                   <div className="helper-warning">
-                    <strong>Incomplete runtime</strong>
-                    <p>{engineSnapshot.missingHelpers.join(", ")}</p>
+                    <strong>Some modes are not packaged yet</strong>
+                    {engineSnapshot.capabilities
+                      .filter((capability) => !capability.available)
+                      .map((capability) => (
+                        <p key={capability.name}>
+                          {capability.name}: {capability.missing.join(", ")}
+                        </p>
+                      ))}
                   </div>
                 ) : (
                   <p className="health-explainer">
-                    Attach only a known-good installation. Process, TUN, and sharing modes still require their matching native helpers and administrator access.
+                    Connections use only the fork-owned runtime. Import reads legacy
+                    configuration and custom modes, but ignores every executable, DLL,
+                    driver, and helper in the selected directory.
                   </p>
                 )}
               </aside>

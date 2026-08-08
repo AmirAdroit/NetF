@@ -34,8 +34,9 @@ shell and a UI-independent engine boundary are developed alongside them.
 - Settings saves are flushed, re-read, validated, backed up, and atomically
   replaced instead of modifying the only configuration in place.
 - A self-contained .NET 10 engine host exposes an allowlisted JSON API to the
-  Rust adapter. The modern Servers tab can attach a user-selected Netch runtime,
-  list non-secret server/mode summaries, and request connect/disconnect.
+  Rust adapter. The modern Servers tab runs a versioned fork-owned runtime,
+  lists non-secret server/mode summaries, imports legacy data, and requests
+  connect/disconnect.
 
 The modern desktop is currently a **functional compatibility preview**, not yet
 a replacement for a known-good client. The engine bridge is connected, but
@@ -97,20 +98,18 @@ npm install
 npm run tauri:dev
 ```
 
-`tauri:dev` prepares the self-contained engine host and launches the desktop
-with administrator rights, matching the legacy application during this
-compatibility phase. In the Servers tab, choose a copied or known-good Netch
-runtime containing `data/settings.json`, `mode/`, and `bin/`. Close the legacy
-Netch process before attaching the same directory.
+`tauri:dev` builds the self-contained engine host, compiles the first-party
+Redirector and RouteHelper, assembles a checksum-manifested runtime template,
+and launches the desktop with administrator rights. On startup, the app verifies
+and installs those assets into its private local application-data directory.
 
-The engine host is built from this fork, but the attached directory currently
-provides settings, modes, native routing helpers, and proxy-core executables.
-A SOCKS server is used directly without starting a proxy core. For compatible
-VMess/VLESS/Trojan-family profiles, `bin/xray.exe` is preferred when it exists;
-otherwise the compatibility selector retains the attached `v2ray-sn.exe` or
-protocol-specific legacy helper. The Servers health panel reports this core
-inventory explicitly. A future packaged runtime will remove this temporary
-dependency on an existing installation.
+The Servers tab can import `data/settings.json` and `mode/Custom` from a legacy
+Netch directory. Import validates the data, creates a rollback backup, and uses
+atomic configuration replacement. It never copies or executes the selected
+directory's `bin`, DLL, driver, or helper files. A SOCKS server is used directly;
+compatible VMess/VLESS/Trojan-family profiles use the packaged, checksum-pinned
+`xray.exe`. Unsupported legacy provider shapes remain visibly unavailable until
+an owned, audited compatibility provider is packaged.
 
 Run frontend checks without opening a desktop window:
 
@@ -161,6 +160,11 @@ dotnet test .\Tests\Tests.csproj -c Release
 The release build packages Xray under its own filename and includes its MPL-2.0
 license. It does not overwrite `v2ray-sn.exe`, so unsupported legacy profile
 shapes retain their existing fallback.
+
+Packaged native/helper provenance, hashes, licenses, and update procedures are
+tracked in `third_party/runtime-components.json`. Components marked
+`distribution-audit-required` are suitable only for compatibility development;
+they block a public release until replaced or fully traced and licensed.
 
 ## Configuration compatibility
 

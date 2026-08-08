@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "org.netchfork.preview",
   "build": {
-    "beforeDevCommand": "npm run prepare:engine && npm run dev",
+    "beforeDevCommand": "npm run prepare:desktop && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run prepare:engine && npm run build",
+    "beforeBuildCommand": "npm run prepare:desktop && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -30,6 +30,7 @@
     "active": true,
     "targets": ["nsis", "msi"],
     "externalBin": ["binaries/netch-engine-host"],
+    "resources": ["runtime-template/**/*"],
     "icon": ["../../../Netch/Resources/Netch.ico"],
     "copyright": "Copyright (c) 2019 AmazingDM and Contributors; fork contributors",
     "shortDescription": "A modernized fork of the Netch Windows proxy client"

@@ -24,8 +24,9 @@ The practical threat model includes:
 - No remote content is rendered as executable HTML.
 - The frontend receives no general shell or unrestricted filesystem primitive.
 - Every Tauri command validates paths, sizes, counts, enum values, and state.
-- The elevated webview cannot provide an engine executable or runtime path;
-  runtime attachment requires a native Rust-owned folder picker.
+- The elevated webview cannot provide an engine executable or runtime path. The
+  runtime is installed from a verified packaged manifest; legacy import sources
+  are selected by a native Rust-owned folder picker and are never executable.
 - Sidecar executable names and argument shapes are allowlisted in native code.
 - Secrets are redacted before structured logging and diagnostics export.
 - Configuration writes are backed up, validated, and atomic.

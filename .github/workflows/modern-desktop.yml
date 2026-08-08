@@ -8,7 +8,11 @@ on:
       - "Netch.EngineHost/**"
       - "Tests/**"
       - "Other/xray-core/**"
+      - "Redirector/**"
+      - "RouteHelper/**"
+      - "Storage/**"
       - "third_party/proxy-cores.json"
+      - "third_party/runtime-components.json"
       - "common.props"
       - "global.json"
       - ".github/workflows/modern-desktop.yml"
@@ -19,7 +23,11 @@ on:
       - "Netch.EngineHost/**"
       - "Tests/**"
       - "Other/xray-core/**"
+      - "Redirector/**"
+      - "RouteHelper/**"
+      - "Storage/**"
       - "third_party/proxy-cores.json"
+      - "third_party/runtime-components.json"
       - "common.props"
       - "global.json"
       - ".github/workflows/modern-desktop.yml"
@@ -65,6 +73,9 @@ jobs:
 
       - name: Prepare headless engine host
         run: npm run prepare:engine
+
+      - name: Assemble owned runtime
+        run: npm run prepare:runtime
 
       - name: Select stable Rust toolchain
         run: rustup default stable
