@@ -1766,6 +1766,293 @@ button:disabled {
   background: #3b301f;
 }
 
+/* NetF identity and authoritative runtime state */
+.brand-mark {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+}
+
+.brand-logo rect {
+  fill: #111827;
+}
+
+.brand-logo path {
+  fill: none;
+  stroke: #54d996;
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-logo circle {
+  fill: #54d996;
+}
+
+.sidebar-status {
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.sidebar-status.state-active {
+  border-color: rgba(84, 217, 150, 0.62);
+  background: rgba(52, 211, 153, 0.13);
+  box-shadow: 0 0 30px rgba(52, 211, 153, 0.1), inset 3px 0 #34d399;
+}
+
+.sidebar-status.state-active .status-pulse {
+  border-color: #5ff0ae;
+  background: #34d399;
+  box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.14), 0 0 15px rgba(52, 211, 153, 0.8);
+}
+
+.sidebar-status.state-transition .status-pulse {
+  border-color: #fbbf24;
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.14);
+  animation: state-pulse 1.2s ease-in-out infinite;
+}
+
+.sidebar-status.state-failed {
+  border-color: rgba(239, 68, 68, 0.58);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.sidebar-status.state-failed .status-pulse {
+  border-color: #fb7185;
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.13);
+}
+
+.sidebar-status.state-inactive .status-pulse,
+.sidebar-status.state-unknown .status-pulse {
+  border-color: #94a3b8;
+  background: transparent;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.08);
+}
+
+.overview-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.overview-hero.state-active {
+  border-color: rgba(52, 211, 153, 0.65);
+  background:
+    radial-gradient(circle at 8% 50%, rgba(52, 211, 153, 0.2), transparent 22rem),
+    var(--surface);
+  box-shadow: 0 20px 55px rgba(16, 185, 129, 0.15), inset 5px 0 #34d399;
+}
+
+.overview-hero.state-transition {
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: inset 5px 0 #f59e0b;
+}
+
+.overview-hero.state-failed {
+  border-color: rgba(239, 68, 68, 0.58);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent 50%), var(--surface);
+  box-shadow: inset 5px 0 #ef4444;
+}
+
+.overview-hero.state-inactive,
+.overview-hero.state-unknown {
+  box-shadow: inset 5px 0 #94a3b8;
+}
+
+.overview-state-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.overview-state-label i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.overview-hero.state-active .overview-state-label {
+  color: var(--accent-dark);
+}
+
+.overview-hero.state-active .overview-state-label i {
+  background: #34d399;
+  box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.13), 0 0 18px rgba(52, 211, 153, 0.7);
+}
+
+.overview-hero.state-transition .overview-state-label i {
+  background: #f59e0b;
+  animation: state-pulse 1.2s ease-in-out infinite;
+}
+
+.overview-hero.state-failed .overview-state-label i {
+  background: #ef4444;
+}
+
+.overview-stat.state-active {
+  border-color: rgba(52, 211, 153, 0.52);
+  background: var(--accent-pale);
+}
+
+.overview-stat.state-failed {
+  border-color: rgba(239, 68, 68, 0.46);
+}
+
+.startup-view {
+  display: grid;
+  max-width: 760px;
+  min-height: 430px;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  margin: 7vh auto 0;
+  padding: 54px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.startup-view.failed {
+  border-color: rgba(239, 68, 68, 0.48);
+}
+
+.startup-view h2,
+.startup-view p {
+  margin: 0;
+}
+
+.startup-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 18px;
+  color: #082d1d;
+  background: #54d996;
+  box-shadow: 0 15px 40px rgba(52, 211, 153, 0.2);
+}
+
+.startup-mark svg {
+  width: 28px;
+}
+
+.startup-explainer {
+  max-width: 540px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.startup-stages {
+  display: grid;
+  width: min(100%, 480px);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 20px 0 8px;
+}
+
+.startup-stages div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.startup-stages span {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #94a3b8;
+  border-radius: 50%;
+}
+
+.startup-stages .current span {
+  border-color: #f59e0b;
+  background: #f59e0b;
+  animation: state-pulse 1.2s ease-in-out infinite;
+}
+
+.startup-stages .done span {
+  border-color: #34d399;
+  background: #34d399;
+}
+
+.startup-registration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.startup-registration span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.startup-registration.verified {
+  color: var(--accent-dark);
+}
+
+.startup-registration.verified span {
+  background: #34d399;
+}
+
+.desktop-settings-section {
+  border-color: rgba(52, 211, 153, 0.28);
+}
+
+.fatal-error {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: 32px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.fatal-error h1,
+.fatal-error p {
+  max-width: 620px;
+  margin: 0;
+}
+
+.fatal-error pre {
+  max-width: 720px;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  white-space: pre-wrap;
+}
+
+@keyframes state-pulse {
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
 :root[data-theme="dark"] .attach-runtime,
 :root[data-theme="dark"] .runtime-path,
 :root[data-theme="dark"] .profile-fields select {

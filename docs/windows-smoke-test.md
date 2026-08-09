@@ -1,4 +1,4 @@
-# Windows smoke test
+# NetF Windows smoke test
 
 Use this checklist before treating the Tauri compatibility preview as a daily
 driver. Run destructive recovery cases only in a disposable Windows VM with a
@@ -18,8 +18,10 @@ would interrupt important work.
    npm run tauri:build -- --debug --no-bundle
    ```
 
-4. Launch `src\Netch.Desktop\src-tauri\target\debug\netch-desktop.exe` and
+4. Launch `src\Netch.Desktop\src-tauri\target\debug\NetF.exe` and
    accept the administrator prompt.
+   Confirm no CMD window appears and the NetF window remains movable while it
+   reports Settings, Runtime, and Engine startup phases.
 5. Open **Servers**, verify **Owned runtime**, select **Import**, choose the old
    Netch directory, and verify that server/custom-mode counts match. The webview
    must show no hostname, password, UUID, key, or subscription URL.
@@ -43,6 +45,9 @@ would interrupt important work.
     file. Restore the original value before connection testing.
 13. In **Activity**, refresh and copy logs. Confirm the output is bounded and
     contains no server password, UUID, token, private key, or proxy URI.
+14. Enable **Start NetF when Windows starts**, confirm the Scheduled Task is
+    verified, sign out/in, and verify NetF starts in the notification area
+    without opening its window or connecting. Disable it and verify removal.
 
 ## Connection parity
 
@@ -59,6 +64,9 @@ Use a profile already proven in the legacy client. Test one mode at a time:
    dependencies are present.
 5. Compare `logging/` output with the legacy run and inspect it for credential
    leakage before sharing diagnostics.
+6. Connect again, close the window, and verify routing continues with a green
+   notification-area icon. Restore NetF, choose **Exit NetF**, and verify the
+   engine and helper processes stop before the application exits.
 
 ## VM-only failure recovery
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsIcon } from "./icons";
 import type { EngineSettings, EngineSnapshot } from "./engine";
+import { errorMessage, type DesktopSettings, type DesktopStartupStatus } from "./desktop";
 
 interface SettingsViewProps {
   snapshot: EngineSnapshot | null;
@@ -10,6 +11,8 @@ interface SettingsViewProps {
 
 export function SettingsView({ snapshot, active }: SettingsViewProps) {
   const [settings, setSettings] = useState<EngineSettings | null>(null);
+  const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
+  const [startupStatus, setStartupStatus] = useState<DesktopStartupStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -19,9 +22,18 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
     if (!active || !snapshot) return;
     let cancelled = false;
     setBusy(true);
-    invoke<EngineSettings>("engine_settings")
-      .then((loaded) => !cancelled && setSettings(loaded))
-      .catch((loadError) => !cancelled && setError(String(loadError)))
+    Promise.all([
+      invoke<EngineSettings>("engine_settings"),
+      invoke<DesktopSettings>("desktop_settings"),
+      invoke<DesktopStartupStatus>("desktop_autostart_status"),
+    ])
+      .then(([engine, desktop, startup]) => {
+        if (cancelled) return;
+        setSettings(engine);
+        setDesktopSettings(desktop);
+        setStartupStatus(startup);
+      })
+      .catch((loadError) => !cancelled && setError(errorMessage(loadError)))
       .finally(() => !cancelled && setBusy(false));
     return () => {
       cancelled = true;
@@ -42,7 +54,30 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
       setSettings(await invoke<EngineSettings>("update_engine_settings", { settings }));
       setMessage("Settings saved atomically. The previous settings file is available as rollback backup.");
     } catch (saveError) {
-      setError(String(saveError));
+      setError(errorMessage(saveError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setRunAtWindowsLogin(enabled: boolean) {
+    if (!desktopSettings || busy) return;
+    const previous = desktopSettings;
+    const next = { ...desktopSettings, runAtWindowsLogin: enabled };
+    setDesktopSettings(next);
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await invoke<DesktopSettings>("update_desktop_settings", { settings: next });
+      setDesktopSettings(saved);
+      setStartupStatus(await invoke<DesktopStartupStatus>("desktop_autostart_status"));
+      setMessage(enabled
+        ? "Windows auto-start is registered and verified. NetF will start in the tray without connecting."
+        : "Windows auto-start was removed.");
+    } catch (saveError) {
+      setDesktopSettings(previous);
+      setError(errorMessage(saveError));
     } finally {
       setBusy(false);
     }
@@ -60,6 +95,25 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
       </section>
 
       <div className="settings-grid">
+        <section className="panel settings-section desktop-settings-section">
+          <div className="panel-heading compact"><div><span className="step-label">Desktop lifecycle</span><h2>Windows sign-in</h2></div></div>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={desktopSettings?.runAtWindowsLogin ?? false}
+              disabled={busy || !desktopSettings}
+              onChange={(event) => void setRunAtWindowsLogin(event.target.checked)}
+            />
+            <span><strong>Start NetF when Windows starts</strong><small>Uses a verified per-user Scheduled Task with highest privileges. Starts quietly in the tray and never connects automatically.</small></span>
+          </label>
+          <div className={`startup-registration ${startupStatus?.enabled && startupStatus.matchesCurrentExecutable ? "verified" : "inactive"}`}>
+            <span />
+            {startupStatus?.enabled
+              ? startupStatus.matchesCurrentExecutable ? "Scheduled Task verified" : "Scheduled Task needs repair"
+              : "Disabled"}
+          </div>
+        </section>
+
         <section className="panel settings-section">
           <div className="panel-heading compact"><div><span className="step-label">Local proxy</span><h2>Listener and health checks</h2></div></div>
           <div className="settings-fields">

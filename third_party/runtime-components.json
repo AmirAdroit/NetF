@@ -4,17 +4,26 @@
     {
       "id": "redirector",
       "status": "built-from-repository-source",
+      "version": "current-fork-source",
+      "architecture": "windows-x86_64",
       "source": "Redirector/",
       "license": "GPL-3.0-only",
       "outputs": ["Redirector.bin", "nfapi.dll"],
+      "artifacts": [
+        { "name": "Redirector.bin", "sha256": "87f6fd604f4ce9d2294b57bd0170858ae229a2627d9c51e677d23cff65e825e7" },
+        { "name": "nfapi.dll", "version": "1.5.1.7", "sha256": "f0519b24f076f52f12353d955ef89863963b5988130233673f2f4a4445e842cc" }
+      ],
       "updateProcedure": "Review Redirector ABI changes, build Release x64 with MSBuild, run Windows process-routing integration tests."
     },
     {
       "id": "route-helper",
       "status": "built-from-repository-source",
+      "version": "current-fork-source",
+      "architecture": "windows-x86_64",
       "source": "RouteHelper/",
       "license": "GPL-3.0-only",
       "outputs": ["RouteHelper.bin"],
+      "sha256": "4aaf083f61ab12308a707baa8529dd83c58d69b0e51d70e2f89eb55983815040",
       "updateProcedure": "Review route ABI changes, build Release x64 with MSBuild, run route creation and rollback tests in a disposable VM."
     },
     {
@@ -22,13 +31,39 @@
       "status": "checksum-pinned-and-traffic-tested",
       "manifest": "third_party/proxy-cores.json#xray",
       "version": "v26.3.27",
+      "architecture": "windows-x86_64",
       "license": "MPL-2.0",
+      "executableSha256": "15c2d007954ac53ba69b80ec91242786b3c0b71d52649165b4ca1d5cc96ef8f1",
       "updateProcedure": "Update the pinned tag, tag object and archive SHA-256; regenerate configs; run validation and loopback traffic tests."
+    },
+    {
+      "id": "xray-routing-data",
+      "status": "checksum-pinned",
+      "version": "packaged-with-xray-v26.3.27",
+      "architecture": "platform-independent-data",
+      "source": "Other/xray-core/fetch.ps1",
+      "license": "See Xray/geodata upstream licenses",
+      "artifacts": [
+        { "name": "geoip.dat", "sha256": "744c97b74c52bae2ac8664fef6ac481d7765cb8432a0df54f0368a88b9b4a354" },
+        { "name": "geosite.dat", "sha256": "adf92de0cfc70e458b399f04c5f912bf42d115ed7e37281b30e2f1c68605e4e9" }
+      ],
+      "updateProcedure": "Fetch only with the pinned Xray build inputs, regenerate the runtime manifest, and run domain-routing regression tests."
+    },
+    {
+      "id": "aiodns-configuration",
+      "status": "configuration-only-helper-incomplete",
+      "version": "inherited-compatibility-data",
+      "architecture": "platform-independent-data",
+      "source": "Storage/bin/aiodns.conf",
+      "license": "GPL-3.0-only repository configuration; helper binary not currently distributed",
+      "sha256": "d161dbd19b3dc9e20904e5f48d5f6757e9c28d33cb9aeb031495c678c0467e95",
+      "updateProcedure": "Keep Split DNS visibly unavailable until a reproducible, licensed aiodns helper is packaged and tested."
     },
     {
       "id": "pcap2socks",
       "status": "checksum-pinned",
       "version": "v0.6.2",
+      "architecture": "windows-x86_64",
       "source": "https://github.com/zhxie/pcap2socks",
       "license": "MIT",
       "artifact": {
@@ -43,6 +78,7 @@
       "id": "wintun",
       "status": "packaged-with-license",
       "version": "0.14.1",
+      "architecture": "windows-x86_64",
       "source": "https://www.wintun.net/",
       "license": "GPL-2.0 OR custom redistribution terms in packaged license",
       "sha256": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
@@ -51,6 +87,8 @@
     {
       "id": "tun2socks",
       "status": "distribution-audit-required",
+      "version": "inherited-unversioned-artifact",
+      "architecture": "windows-x86_64",
       "source": "https://github.com/xjasonlyu/tun2socks",
       "license": "UNKNOWN-FOR-CURRENT-ARTIFACT",
       "sha256": "1eaca52e1b73491747df71403fdd1228481c7f43691af623aac29889619f0d23",
@@ -60,6 +98,9 @@
       "id": "netfilter2-driver",
       "status": "distribution-audit-required",
       "version": "1.6.3.0",
+      "architecture": "windows-x86_64",
+      "source": "inherited NetFilter SDK artifact; exact upstream source unresolved",
+      "license": "UNKNOWN-FOR-CURRENT-ARTIFACT",
       "sha256": "4af6f672119f4f13e33b8914630eedea97d299b5c92c2105a4015dd0ca6e933e",
       "updateProcedure": "Identify exact upstream source, license and driver-signing provenance; ABI-test with nfapi/Redirector before public distribution."
     }

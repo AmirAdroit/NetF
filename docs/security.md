@@ -28,6 +28,9 @@ The practical threat model includes:
   runtime is installed from a verified packaged manifest; legacy import sources
   are selected by a native Rust-owned folder picker and are never executable.
 - Sidecar executable names and argument shapes are allowlisted in native code.
+- Windows auto-start uses one fixed per-user Task Scheduler name and the
+  internally resolved NetF executable. The frontend supplies only an enabled
+  boolean; registration is verified before the setting is persisted.
 - Secrets are redacted before structured logging and diagnostics export.
 - Configuration writes are backed up, validated, and atomic.
 - Privileged mutations have idempotent compensating cleanup.
@@ -75,6 +78,8 @@ a filename means only that the file exists in the selected tree.
 - The binary provenance and redistribution terms need a complete audit; the
   existing NOTICE includes at least one unknown license entry.
 - The legacy process runs entirely as administrator.
+- The full elevated NetF UI remains a compatibility architecture; an
+  authenticated privileged broker is required before calling it least-privilege.
 - Engine code and UI code are coupled through global mutable state.
 - Some secrets may be passed to child processes or retained in settings.
 - Automated tests do not currently validate route/DNS/firewall rollback.

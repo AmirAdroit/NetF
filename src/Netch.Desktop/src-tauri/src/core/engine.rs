@@ -9,6 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
+use super::backend::{BackendComponent, BackendInfo, SUPPORTED_ENGINE_API_VERSION};
+use super::settings::DesktopStartupStatus;
+
 const MAXIMUM_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAXIMUM_STALE_RESPONSES: usize = 64;
 
@@ -120,6 +123,12 @@ pub struct EngineSettings {
     pub tcp_fast_open: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct EngineAttachment {
+    pub info: BackendInfo,
+    pub snapshot: EngineSnapshot,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineSnapshot {
@@ -178,7 +187,7 @@ pub struct EngineSupervisor {
 }
 
 impl EngineSupervisor {
-    pub fn attach(&self, runtime_root: impl AsRef<Path>) -> Result<EngineSnapshot, EngineError> {
+    pub fn attach(&self, runtime_root: impl AsRef<Path>) -> Result<EngineAttachment, EngineError> {
         let runtime_root = validate_runtime(runtime_root.as_ref())?;
         let host_path = locate_engine_host()?;
 
@@ -187,9 +196,12 @@ impl EngineSupervisor {
             .lock()
             .map_err(|_| EngineError::Protocol("engine supervisor lock was poisoned".into()))?;
         if let Some(previous) = current.as_mut() {
-            let status: EngineStatus = previous.request("status", json!({}))?;
-            if status.state != "stopped" && status.state != "failed" {
-                return Err(EngineError::ActiveRuntime);
+            match previous.request::<EngineStatus>("status", json!({})) {
+                Ok(status) if status.state != "stopped" && status.state != "failed" => {
+                    return Err(EngineError::ActiveRuntime);
+                }
+                Ok(_) | Err(EngineError::Stopped(_)) | Err(EngineError::Protocol(_)) => {}
+                Err(error) => return Err(error),
             }
         }
 
@@ -199,16 +211,43 @@ impl EngineSupervisor {
 
         let mut process = EngineProcess::start(&host_path, &runtime_root)?;
         let hello: HelloResponse = process.request("hello", json!({}))?;
-        if hello.api_version != 1 {
+        if hello.api_version != SUPPORTED_ENGINE_API_VERSION {
             return Err(EngineError::Protocol(format!(
-                "unsupported API version {}",
-                hello.api_version
+                "unsupported engine API version {}; NetF supports version {}",
+                hello.api_version, SUPPORTED_ENGINE_API_VERSION
             )));
+        }
+        for capability in ["snapshot", "status", "connect", "disconnect", "shutdown"] {
+            if !hello.supports.iter().any(|item| item == capability) {
+                return Err(EngineError::Protocol(format!(
+                    "engine handshake omitted required capability {capability}"
+                )));
+            }
         }
         let snapshot = process.request("snapshot", json!({}))?;
 
+        let info = BackendInfo {
+            id: hello.backend_id,
+            display_name: hello.display_name,
+            version: hello.backend_version,
+            api_version: hello.api_version,
+            capabilities: hello.supports,
+            components: hello.components,
+        };
+
         *current = Some(process);
-        Ok(snapshot)
+        Ok(EngineAttachment { info, snapshot })
+    }
+
+    pub fn try_status(&self) -> Result<Option<EngineStatus>, EngineError> {
+        let Ok(mut current) = self.process.try_lock() else {
+            return Ok(None);
+        };
+        current
+            .as_mut()
+            .ok_or(EngineError::NotAttached)
+            .and_then(|process| process.request("status", json!({})))
+            .map(Some)
     }
 
     pub fn snapshot(&self) -> Result<EngineSnapshot, EngineError> {
@@ -281,6 +320,45 @@ impl EngineSupervisor {
         let value = serde_json::to_value(settings)
             .map_err(|error| EngineError::Protocol(error.to_string()))?;
         self.with_process(|process| process.request("updateSettings", value))
+    }
+
+    pub fn desktop_startup_status(
+        &self,
+        executable_path: &Path,
+    ) -> Result<DesktopStartupStatus, EngineError> {
+        self.with_process(|process| {
+            process.request(
+                "desktopStartupStatus",
+                json!({ "executablePath": executable_path.display().to_string() }),
+            )
+        })
+    }
+
+    pub fn configure_desktop_startup(
+        &self,
+        executable_path: &Path,
+        enabled: bool,
+    ) -> Result<DesktopStartupStatus, EngineError> {
+        self.with_process(|process| {
+            process.request(
+                "configureDesktopStartup",
+                json!({
+                    "executablePath": executable_path.display().to_string(),
+                    "enabled": enabled
+                }),
+            )
+        })
+    }
+
+    pub fn shutdown(&self) -> Result<(), EngineError> {
+        let mut current = self
+            .process
+            .lock()
+            .map_err(|_| EngineError::Protocol("engine supervisor lock was poisoned".into()))?;
+        if let Some(mut process) = current.take() {
+            process.shutdown();
+        }
+        Ok(())
     }
 
     fn with_process<T>(
@@ -516,7 +594,9 @@ fn parse_protocol_line(line: &str) -> Option<WireResponse> {
 fn request_timeout(method: &str) -> Duration {
     match method {
         "connect" | "importLegacy" => Duration::from_secs(60),
-        "saveMode" | "mergeMode" | "updateSettings" => Duration::from_secs(30),
+        "saveMode" | "mergeMode" | "updateSettings" | "configureDesktopStartup" => {
+            Duration::from_secs(30)
+        }
         "disconnect" | "shutdown" => Duration::from_secs(30),
         _ => Duration::from_secs(10),
     }
@@ -532,6 +612,12 @@ impl Drop for EngineProcess {
 #[serde(rename_all = "camelCase")]
 struct HelloResponse {
     api_version: u32,
+    backend_id: String,
+    display_name: String,
+    backend_version: String,
+    supports: Vec<String>,
+    #[serde(default)]
+    components: Vec<BackendComponent>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -642,10 +728,13 @@ mod tests {
         fs::write(directory.path().join("data/settings.json"), "{}").expect("settings fixture");
 
         let supervisor = EngineSupervisor::default();
-        let snapshot = supervisor
+        let attachment = supervisor
             .attach(directory.path())
             .expect("engine snapshot");
+        let snapshot = attachment.snapshot;
 
+        assert_eq!(attachment.info.id, "netch-compat");
+        assert_eq!(attachment.info.api_version, 1);
         assert_eq!(snapshot.api_version, 1);
         assert_eq!(snapshot.status.state, "stopped");
         assert!(snapshot.servers.is_empty());
@@ -658,6 +747,33 @@ mod tests {
                 .iter()
                 .any(|capability| capability.name == "Process routing")
         );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn supervisor_can_reattach_after_the_host_crashes() {
+        let directory = tempdir().expect("temporary directory");
+        fs::create_dir_all(directory.path().join("data")).expect("data directory");
+        fs::create_dir_all(directory.path().join("mode")).expect("mode directory");
+        fs::create_dir_all(directory.path().join("bin")).expect("bin directory");
+        fs::write(directory.path().join("data/settings.json"), "{}").expect("settings fixture");
+
+        let supervisor = EngineSupervisor::default();
+        supervisor
+            .attach(directory.path())
+            .expect("first attachment");
+        {
+            let mut process = supervisor.process.lock().unwrap();
+            let process = process.as_mut().expect("running host");
+            process.child.kill().expect("kill host");
+            process.child.wait().expect("wait for host");
+        }
+
+        let recovered = supervisor
+            .attach(directory.path())
+            .expect("recovered attachment");
+        assert_eq!(recovered.snapshot.status.state, "stopped");
+        assert_eq!(recovered.info.id, "netch-compat");
     }
 
     #[test]
@@ -746,7 +862,10 @@ mod tests {
         .unwrap();
 
         let supervisor = EngineSupervisor::default();
-        let snapshot = supervisor.attach(owned.path()).expect("owned engine");
+        let snapshot = supervisor
+            .attach(owned.path())
+            .expect("owned engine")
+            .snapshot;
         let source_id = snapshot
             .modes
             .iter()

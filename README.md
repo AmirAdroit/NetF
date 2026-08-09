@@ -1,11 +1,12 @@
-# Netch modernization fork
+# NetF
 
-> **Status: early modernization work.** This repository is a fork of
+> **Status: functional Windows compatibility build under active development.**
+> NetF is a fork of
 > [Netch](https://github.com/netchx/netch), originally created by AmazingDM and
 > its contributors. It is not an official Netch release and is not yet a
 > replacement for a known-good Netch installation.
 
-Netch is a lightweight Windows proxy client with process-aware routing, TUN
+NetF preserves Netch's lightweight Windows proxy client behavior, including process-aware routing, TUN
 routing, network sharing, multiple proxy protocols, and reusable mode files.
 This fork exists to preserve those useful behaviors while making the project
 maintainable, testable, secure, and pleasant to use on current Windows systems.
@@ -45,6 +46,15 @@ shell and a UI-independent engine boundary are developed alongside them.
   a bounded, credential-redacted log tail that can be copied for diagnostics.
 - Settings exposes a validated operational subset of listener, redirector,
   DNS, health-check, and Xray behavior with atomic persistence and rollback.
+- Runtime verification and the engine handshake run off the desktop event loop,
+  so the window remains responsive and reports the current startup stage.
+- Overview makes stopped, transitioning, connected, failed, and unknown states
+  explicit in text and color. The same state drives the sidebar, window title,
+  Activity view, and notification-area icon.
+- Closing the window hides NetF to the notification area. Explicit **Exit NetF**
+  performs cleanup, and a second launch focuses the existing instance.
+- Settings can register a verified per-user Windows Scheduled Task to start
+  NetF in the tray at sign-in. Auto-start never connects automatically.
 
 The modern desktop is currently a **functional compatibility build**, not yet
 a replacement for a known-good client. The engine bridge is connected, but
@@ -59,7 +69,7 @@ Modern desktop (Tauri 2 + React/TypeScript)
         |
         | typed Tauri commands and events
         v
-Rust desktop adapter / compatibility API
+Rust desktop controller + versioned EngineBackend API
         |
         | staged engine boundary
         v
@@ -75,6 +85,8 @@ See [architecture](docs/architecture.md), the
 [compatibility matrix](docs/compatibility.md), the
 [modernization roadmap](docs/modernization-roadmap.md), and
 [security notes](docs/security.md) before changing networking or privilege code.
+Operational failures are covered in [troubleshooting](docs/troubleshooting.md)
+and the [Windows smoke test](docs/windows-smoke-test.md).
 
 ## Repository layout
 
@@ -108,7 +120,7 @@ npm run tauri:dev
 
 `tauri:dev` builds the self-contained engine host, compiles the first-party
 Redirector and RouteHelper, assembles a checksum-manifested runtime template,
-and launches the desktop with administrator rights. On startup, the app verifies
+and launches the desktop with administrator rights and no console window. On startup, the app verifies
 and installs those assets into its private local application-data directory.
 
 The Servers tab can import `data/settings.json` and `mode/Custom` from a legacy
@@ -141,7 +153,7 @@ cd src\Netch.Desktop
 npm run tauri:build -- --debug --no-bundle
 ```
 
-The output is `src\Netch.Desktop\src-tauri\target\debug\netch-desktop.exe`.
+The output is `src\Netch.Desktop\src-tauri\target\debug\NetF.exe`.
 See [Windows smoke testing](docs/windows-smoke-test.md) before connecting a
 real profile.
 
@@ -192,6 +204,12 @@ editor accepts one rule per line for Process and TUN modes. Share-mode arguments
 remain read-only because exposing arbitrary helper arguments to the webview
 would violate the command boundary.
 
+Desktop-only settings are stored separately as `desktop-settings.json` under
+the existing local application-data identity, preserving current owned runtime
+data during the visible rename. The auto-start toggle changes only the fixed
+**NetF Startup** Scheduled Task; the webview cannot supply an executable path,
+task name, or arguments.
+
 ## Security and distribution
 
 Netch performs administrator-level networking changes and loads native code and
@@ -214,7 +232,6 @@ This fork remains licensed under **GNU GPL v3**. Preserve `LICENSE`,
 modified binaries. New code in this repository is distributed under the same
 GPL-3.0 license unless a file explicitly states otherwise.
 
-The name and branding for the fork are intentionally still a working title.
-Before the first public release, choose distinct branding that does not imply
-endorsement by the original Netch maintainers while keeping prominent credit to
-the upstream project.
+NetF has distinct branding and does not represent itself as an official Netch
+release. The UI, documentation, license, and NOTICE retain prominent credit to
+AmazingDM and the upstream Netch contributors.

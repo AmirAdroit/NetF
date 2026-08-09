@@ -118,12 +118,20 @@ internal static class Program
                 "hello" => EngineResponse.Success(request.Id, new
                 {
                     apiVersion = 1,
-                    engine = "netch-dotnet-bridge",
+                    backendId = "netch-compat",
+                    displayName = "Netch compatibility engine",
+                    backendVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "development",
+                    components = new[]
+                    {
+                        new { name = "Netch.EngineHost", version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "development" },
+                        new { name = ".NET runtime", version = Environment.Version.ToString() }
+                    },
                     supports = new[]
                     {
                         "snapshot", "status", "connect", "disconnect", "importLegacy",
                         "modeDetail", "saveMode", "mergeMode", "logs", "settings",
-                        "updateSettings", "shutdown"
+                        "updateSettings", "desktopStartupStatus", "configureDesktopStartup",
+                        "shutdown"
                     }
                 }),
                 "snapshot" => EngineResponse.Success(request.Id, BuildSnapshot(state)),
@@ -137,6 +145,10 @@ internal static class Program
                 "logs" => EngineResponse.Success(request.Id, GetLogs(request)),
                 "settings" => EngineResponse.Success(request.Id, EngineSettingsService.Get()),
                 "updateSettings" => await UpdateSettingsAsync(request, state),
+                "desktopStartupStatus" => EngineResponse.Success(
+                    request.Id,
+                    DesktopStartupService.Get(GetDesktopStartupParameters(request).ExecutablePath)),
+                "configureDesktopStartup" => ConfigureDesktopStartup(request),
                 "shutdown" => EngineResponse.Success(request.Id, state.Snapshot(), shutdown: true),
                 _ => EngineResponse.Failure(request.Id, "unknown_method", "The requested engine method is not allowlisted.")
             };
@@ -328,6 +340,18 @@ internal static class Program
         return EngineResponse.Success(request.Id, settings);
     }
 
+    private static EngineResponse ConfigureDesktopStartup(EngineRequest request)
+    {
+        var parameters = GetDesktopStartupParameters(request);
+        return EngineResponse.Success(
+            request.Id,
+            DesktopStartupService.Configure(parameters.Enabled, parameters.ExecutablePath));
+    }
+
+    private static DesktopStartupParameters GetDesktopStartupParameters(EngineRequest request) =>
+        request.Parameters.Deserialize<DesktopStartupParameters>(JsonOptions)
+        ?? throw new ArgumentException("Desktop startup parameters are required.");
+
     private static void RequireStopped(HostState state, string operation)
     {
         if (state.State != ConnectionState.Stopped && state.State != ConnectionState.Failed)
@@ -352,6 +376,8 @@ internal static class Program
     private sealed record MergeModeParameters(int SourceModeId, int TargetModeId);
 
     private sealed record LogParameters(int Limit);
+
+    private sealed record DesktopStartupParameters(string ExecutablePath, bool Enabled = false);
 
     private sealed record HostOptions(string RuntimeRoot, string RuntimeKind);
 

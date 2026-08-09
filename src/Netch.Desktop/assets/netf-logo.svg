@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">NetF</title>
+  <desc id="desc">A modern NF routing mark ending in a network node.</desc>
+  <rect x="28" y="28" width="456" height="456" rx="112" fill="#111827"/>
+  <path d="M142 354V158L262 354V158H382M262 256H354" fill="none" stroke="#34D399" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="382" cy="354" r="38" fill="#34D399"/>
+  <circle cx="382" cy="354" r="15" fill="#111827"/>
+</svg>

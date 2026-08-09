@@ -29,12 +29,15 @@ import {
   type EngineSnapshot,
   type EngineStatus,
   type LegacyImportResult,
-  type RuntimeInfo,
 } from "./engine";
 import { ActivityView } from "./ActivityView";
 import { ModeManager } from "./ModeManager";
 import { OverviewView } from "./OverviewView";
 import { SettingsView } from "./SettingsView";
+import { BrandMark } from "./BrandMark";
+import { StartupView } from "./StartupView";
+import { enginePresentation, errorMessage } from "./desktop";
+import { useDesktopController } from "./useDesktopController";
 import {
   normalizeThemePreference,
   resolveTheme,
@@ -61,6 +64,12 @@ const viewHeadings: Record<ViewName, { eyebrow: string; title: string; badge: st
 };
 
 function App() {
+  const desktop = useDesktopController();
+  const engineSnapshot = desktop.snapshot;
+  const setEngineSnapshot = desktop.setSnapshot;
+  const runtimeRoot = desktop.runtime?.runtimeRoot ?? "";
+  const runtimeVersion = desktop.runtime?.runtimeVersion ?? "";
+  const statusPresentation = enginePresentation(desktop.engine.phase);
   const [activeView, setActiveView] = useState<ViewName>("Overview");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY)),
@@ -72,14 +81,10 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [engineSnapshot, setEngineSnapshot] = useState<EngineSnapshot | null>(null);
-  const [runtimeRoot, setRuntimeRoot] = useState("");
-  const [runtimeVersion, setRuntimeVersion] = useState("");
   const [importSummary, setImportSummary] = useState("");
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
-  const [engineBusy, setEngineBusy] = useState(true);
-  const [connectionMayBeActive, setConnectionMayBeActive] = useState(false);
+  const [engineBusy, setEngineBusy] = useState(false);
   const [connectionModeQuery, setConnectionModeQuery] = useState("");
 
   const summary = summarizeScan(report);
@@ -118,33 +123,10 @@ function App() {
   }, [themePreference]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadOwnedRuntime() {
-      try {
-        const [runtime, snapshot] = await Promise.all([
-          invoke<RuntimeInfo>("runtime_info"),
-          invoke<EngineSnapshot>("engine_snapshot"),
-        ]);
-        if (cancelled) return;
-        setRuntimeRoot(runtime.runtimeRoot);
-        setRuntimeVersion(runtime.runtimeVersion);
-        setEngineSnapshot(snapshot);
-        setConnectionMayBeActive(snapshot.status.state !== "stopped");
-        setSelectedServerId(snapshot.servers[0]?.id ?? null);
-        setSelectedModeId(snapshot.modes[0]?.id ?? null);
-      } catch (startupError) {
-        if (!cancelled) setError(String(startupError));
-      } finally {
-        if (!cancelled) setEngineBusy(false);
-      }
-    }
-
-    void loadOwnedRuntime();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!engineSnapshot) return;
+    setSelectedServerId((current) => current ?? engineSnapshot.servers[0]?.id ?? null);
+    setSelectedModeId((current) => current ?? engineSnapshot.modes[0]?.id ?? null);
+  }, [engineSnapshot]);
 
   async function chooseFolder() {
     try {
@@ -156,7 +138,7 @@ function App() {
         setError("");
       }
     } catch (dialogError) {
-      setError(`Could not open the directory picker: ${String(dialogError)}`);
+      setError(`Could not open the directory picker: ${errorMessage(dialogError)}`);
     }
   }
 
@@ -170,14 +152,13 @@ function App() {
       );
       if (!imported) return;
       setEngineSnapshot(imported.snapshot);
-      setConnectionMayBeActive(false);
       setSelectedServerId(imported.snapshot.servers[0]?.id ?? null);
       setSelectedModeId(imported.snapshot.modes[0]?.id ?? null);
       setImportSummary(
         `Imported ${imported.snapshot.servers.length} server(s) and ${imported.importedCustomModes} custom mode(s). A rollback backup was created.`,
       );
     } catch (importError) {
-      setError(String(importError));
+      setError(errorMessage(importError));
     } finally {
       setEngineBusy(false);
     }
@@ -186,7 +167,6 @@ function App() {
   async function connectProfile() {
     if (!canConnect(engineSnapshot, selectedServerId, selectedModeId) || engineBusy) return;
     setEngineBusy(true);
-    setConnectionMayBeActive(true);
     setError("");
     try {
       const status = await invoke<EngineStatus>("connect_profile", {
@@ -195,7 +175,7 @@ function App() {
       });
       setEngineSnapshot((current) => (current ? { ...current, status } : current));
     } catch (connectError) {
-      setError(String(connectError));
+      setError(errorMessage(connectError));
       setEngineSnapshot((current) =>
         current
           ? {
@@ -220,10 +200,8 @@ function App() {
     try {
       const status = await invoke<EngineStatus>("disconnect_profile");
       setEngineSnapshot((current) => (current ? { ...current, status } : current));
-      setConnectionMayBeActive(false);
     } catch (disconnectError) {
-      setError(String(disconnectError));
-      setConnectionMayBeActive(true);
+      setError(errorMessage(disconnectError));
     } finally {
       setEngineBusy(false);
     }
@@ -234,7 +212,6 @@ function App() {
     try {
       const snapshot = await invoke<EngineSnapshot>("engine_snapshot");
       setEngineSnapshot(snapshot);
-      setConnectionMayBeActive(snapshot.status.state !== "stopped");
     } catch {
       // Preserve the actionable error from the operation that triggered refresh.
     }
@@ -255,7 +232,7 @@ function App() {
       setExcludedRules(new Set());
     } catch (scanError) {
       setReport(null);
-      setError(String(scanError));
+      setError(errorMessage(scanError));
     } finally {
       setBusy(false);
     }
@@ -277,18 +254,18 @@ function App() {
       setCopied(true);
       setError("");
     } catch (clipboardError) {
-      setError(`Could not copy rules: ${String(clipboardError)}`);
+      setError(`Could not copy rules: ${errorMessage(clipboardError)}`);
     }
   }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand" aria-label="Netch modern desktop">
-          <span className="brand-mark">N</span>
+        <div className="brand" aria-label="NetF desktop">
+          <span className="brand-mark"><BrandMark /></span>
           <span className="brand-copy">
-            <strong>Netch</strong>
-            <small>modern desktop</small>
+            <strong>NetF</strong>
+            <small>Windows routing client</small>
           </span>
         </div>
 
@@ -306,15 +283,15 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-status">
+        <div className={`sidebar-status state-${statusPresentation.tone}`}>
           <div className="status-heading">
             <span className="status-pulse" />
-            {engineSnapshot ? engineSnapshot.status.state : "Engine detached"}
+            {statusPresentation.shortLabel}
           </div>
           <p>
-            {engineSnapshot
-              ? engineSnapshot.status.message
-              : "Preparing the fork-owned runtime and verified proxy cores."}
+            {desktop.startup.phase === "ready"
+              ? desktop.engine.message
+              : desktop.startup.message}
           </p>
           <button type="button" onClick={() => setActiveView("Servers")}>
             Open connection view <ChevronIcon />
@@ -359,8 +336,10 @@ function App() {
           </div>
         </header>
 
-        {activeView === "Overview" ? (
-          <OverviewView snapshot={engineSnapshot} runtimeVersion={runtimeVersion} onNavigate={setActiveView} />
+        {desktop.startup.phase !== "ready" ? (
+          <StartupView startup={desktop.startup} error={desktop.error} onRetry={() => void desktop.retry()} />
+        ) : activeView === "Overview" ? (
+          <OverviewView engineState={desktop.engine} snapshot={engineSnapshot} runtimeVersion={runtimeVersion} onNavigate={setActiveView} />
         ) : activeView === "Servers" ? (
           <div className="engine-workspace">
             <section className="hero-card engine-hero">
@@ -387,7 +366,7 @@ function App() {
                 <div className="panel-heading">
                   <div>
                     <span className="step-label">Runtime</span>
-                    <h2>{engineSnapshot ? "Profile selection" : "Attach Netch"}</h2>
+                    <h2>{engineSnapshot ? "Profile selection" : "Prepare NetF"}</h2>
                   </div>
                   <span className={`connection-pill ${engineSnapshot?.status.state ?? "detached"}`}>
                     {engineSnapshot?.status.state ?? "detached"}
@@ -450,7 +429,7 @@ function App() {
                     </div>
 
                     <div className="engine-actions">
-                      {canStopEngine(engineSnapshot, connectionMayBeActive) ? (
+                      {canStopEngine(engineSnapshot, desktop.engine.active || desktop.engine.phase === "failed") ? (
                         <button className="stop-action" disabled={engineBusy} onClick={disconnectProfile} type="button">
                           <ActivityIcon /> {engineBusy ? "Stopping…" : engineSnapshot.status.state === "failed" ? "Stop engine" : "Disconnect"}
                         </button>
@@ -697,7 +676,7 @@ function App() {
         </section>
           </>
         ) : activeView === "Activity" ? (
-          <ActivityView snapshot={engineSnapshot} active />
+          <ActivityView engineState={desktop.engine} snapshot={engineSnapshot} active />
         ) : (
           <SettingsView snapshot={engineSnapshot} active />
         )}

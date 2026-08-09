@@ -39,7 +39,7 @@ Tauri / React UI (currently elevated for parity; unprivileged target state)
   |
   | versioned, typed commands; state and log event channels
   v
-Desktop adapter (Rust)
+Desktop controller and replaceable EngineBackend (Rust)
   |
   | bounded JSON-line IPC over supervised child stdio during migration
   v
@@ -63,6 +63,10 @@ a rollback backup, and never copies or executes the source `bin` directory.
 Native/helper stdout is treated as untrusted noise and filtered before typed
 protocol envelopes reach command handling. Requests have operation-specific
 response deadlines so a damaged helper cannot block the UI indefinitely.
+Runtime installation and the first engine handshake run on a blocking worker,
+never in Tauri setup. A typed startup state machine reports settings, runtime,
+engine, ready, and failed phases. A serialized health monitor probes the engine
+every three seconds and skips a tick while another request owns the supervisor.
 The target security model separates the normal UI from a small
 privileged broker. The broker must authenticate its local client, use a named
 pipe ACL restricted to the interactive user and service identity, and expose
@@ -85,6 +89,16 @@ specific operations rather than arbitrary commands.
 - translate engine events into typed frontend events/channels;
 - supervise engine lifetime and enforce protocol/version compatibility;
 - expose no unrestricted shell or filesystem API to JavaScript.
+- own window/tray lifecycle, single-instance behavior, and authoritative state;
+- keep Windows desktop settings separate from engine settings.
+
+### Engine backend boundary
+
+`EngineBackend` is the desktop-facing interface. The current
+`NetchCompatibilityBackend` validates backend identity, API version, required
+capabilities, backend version, and component versions before publishing Ready.
+Future engines must implement this boundary instead of adding Netch-specific
+behavior to React or Tauri command handlers.
 
 ### Engine
 
@@ -110,6 +124,8 @@ The versioned IPC contract currently implements:
 - `connect(server_id, mode_id)` and `disconnect`;
 - `modeDetail`, `saveMode`, and `mergeMode` for typed Process/TUN rules;
 - `settings` and `updateSettings` for the allowlisted operational subset;
+- `desktopStartupStatus` and `configureDesktopStartup` for one fixed, verified
+  per-user Windows Scheduled Task;
 - `logs` for the bounded, redacted application-log tail.
 
 The Rust/Tauri layer mirrors these as narrow typed commands and selects the

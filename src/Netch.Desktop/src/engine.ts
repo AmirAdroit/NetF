@@ -1,5 +1,5 @@
 export interface EngineStatus {
-  state: "stopped" | "starting" | "connected" | "stopping" | "failed";
+  state: "stopped" | "starting" | "connected" | "stopping" | "failed" | "unknown";
   message: string;
 }
 
@@ -60,11 +60,6 @@ export interface RuntimeCapability {
   name: string;
   available: boolean;
   missing: string[];
-}
-
-export interface RuntimeInfo {
-  runtimeRoot: string;
-  runtimeVersion: string;
 }
 
 export interface LegacyImportResult {

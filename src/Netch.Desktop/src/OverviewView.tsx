@@ -1,15 +1,18 @@
 import { ActivityIcon, LayersIcon, ServerIcon, SettingsIcon } from "./icons";
 import type { EngineSnapshot } from "./engine";
+import { enginePresentation, type EngineRuntimeState } from "./desktop";
 
 type ViewName = "Overview" | "Servers" | "Modes" | "Activity" | "Settings";
 
 interface OverviewViewProps {
   snapshot: EngineSnapshot | null;
+  engineState: EngineRuntimeState;
   runtimeVersion: string;
   onNavigate: (view: ViewName) => void;
 }
 
-export function OverviewView({ snapshot, runtimeVersion, onNavigate }: OverviewViewProps) {
+export function OverviewView({ snapshot, engineState, runtimeVersion, onNavigate }: OverviewViewProps) {
+  const state = enginePresentation(engineState.phase);
   const origins = snapshot?.modes.reduce(
     (counts, mode) => ({ ...counts, [mode.origin]: counts[mode.origin] + 1 }),
     { "built-in": 0, imported: 0, user: 0 },
@@ -18,12 +21,13 @@ export function OverviewView({ snapshot, runtimeVersion, onNavigate }: OverviewV
 
   return (
     <div className="overview-view">
-      <section className="hero-card overview-hero">
+      <section className={`hero-card overview-hero state-${state.tone}`}>
         <div className="hero-copy">
-          <span className="feature-icon"><ActivityIcon /></span>
+          <span className="feature-icon state-lightning"><ActivityIcon /></span>
           <div>
-            <h2>{snapshot?.status.state === "connected" ? "Traffic routing is active" : "Engine ready"}</h2>
-            <p>{snapshot?.status.message ?? "Preparing the owned compatibility runtime."}</p>
+            <span className="overview-state-label"><i />{state.label}</span>
+            <h2>{engineState.phase === "connected" ? "NetF is routing selected application traffic" : "NetF is ready but not routing traffic"}</h2>
+            <p>{engineState.message}</p>
           </div>
         </div>
         <div className="hero-meta"><span>Owned runtime {runtimeVersion || "—"}</span><span>API v{snapshot?.apiVersion ?? "—"}</span></div>
@@ -32,7 +36,7 @@ export function OverviewView({ snapshot, runtimeVersion, onNavigate }: OverviewV
       <section className="overview-stat-grid">
         <button className="overview-stat" onClick={() => onNavigate("Servers")} type="button"><ServerIcon /><strong>{snapshot?.servers.length ?? 0}</strong><span>Servers</span></button>
         <button className="overview-stat" onClick={() => onNavigate("Modes")} type="button"><LayersIcon /><strong>{snapshot?.modes.length ?? 0}</strong><span>Modes</span></button>
-        <button className="overview-stat" onClick={() => onNavigate("Activity")} type="button"><ActivityIcon /><strong>{snapshot?.status.state ?? "starting"}</strong><span>Engine state</span></button>
+        <button className={`overview-stat state-${state.tone}`} onClick={() => onNavigate("Activity")} type="button"><ActivityIcon /><strong>{state.shortLabel}</strong><span>Engine state</span></button>
         <button className="overview-stat" onClick={() => onNavigate("Settings")} type="button"><SettingsIcon /><strong>{unavailable.length}</strong><span>Unavailable capabilities</span></button>
       </section>
 

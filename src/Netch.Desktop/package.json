@@ -1,5 +1,5 @@
 {
-  "name": "netch-modern-desktop",
+  "name": "netf-desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -20,6 +20,9 @@
     "@tauri-apps/plugin-dialog": "2.7.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
+  },
+  "overrides": {
+    "nanoid": "3.3.18"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",

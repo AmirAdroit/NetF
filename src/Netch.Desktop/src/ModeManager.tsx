@@ -11,6 +11,7 @@ import {
   type ModeMergeResult,
   type ModeSaveResult,
 } from "./engine";
+import { errorMessage } from "./desktop";
 
 interface ModeManagerProps {
   snapshot: EngineSnapshot;
@@ -70,7 +71,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
         setBypassText(rulesToText(loaded.bypass));
         setMergeSourceId(null);
       })
-      .catch((loadError) => !cancelled && setError(String(loadError)))
+      .catch((loadError) => !cancelled && setError(errorMessage(loadError)))
       .finally(() => !cancelled && setBusy(false));
     return () => {
       cancelled = true;
@@ -122,7 +123,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
       setBypassText(rulesToText(saved.mode.bypass));
       setMessage(saved.createdCopy ? "Saved as a user-owned mode; the original remains unchanged." : "Mode saved atomically. A rollback backup was kept.");
     } catch (saveError) {
-      setError(String(saveError));
+      setError(errorMessage(saveError));
     } finally {
       setBusy(false);
     }
@@ -149,7 +150,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
         `Merged ${merged.addedHandleRules} handled and ${merged.addedBypassRules} bypass rule(s).${merged.createdCopy ? " The built-in target was saved as a user copy." : ""}`,
       );
     } catch (mergeError) {
-      setError(String(mergeError));
+      setError(errorMessage(mergeError));
     } finally {
       setBusy(false);
     }

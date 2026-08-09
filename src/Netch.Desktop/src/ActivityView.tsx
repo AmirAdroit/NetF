@@ -2,34 +2,35 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ActivityIcon, CopyIcon } from "./icons";
 import type { EngineLogResult, EngineSnapshot } from "./engine";
+import { enginePresentation, errorMessage, type EngineRuntimeState } from "./desktop";
 
 interface ActivityViewProps {
   snapshot: EngineSnapshot | null;
+  engineState: EngineRuntimeState;
   active: boolean;
 }
 
-export function ActivityView({ snapshot, active }: ActivityViewProps) {
+export function ActivityView({ snapshot, engineState, active }: ActivityViewProps) {
   const [logs, setLogs] = useState<EngineLogResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!snapshot) return;
     try {
       setBusy(true);
       setError("");
       setCopied(false);
       setLogs(await invoke<EngineLogResult>("engine_logs", { limit: 250 }));
     } catch (loadError) {
-      setError(String(loadError));
+      setError(errorMessage(loadError));
     } finally {
       setBusy(false);
     }
-  }, [snapshot]);
+  }, []);
 
   useEffect(() => {
-    if (!active || !snapshot) return;
+    if (!active) return;
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
@@ -42,7 +43,7 @@ export function ActivityView({ snapshot, active }: ActivityViewProps) {
       setCopied(true);
       setError("");
     } catch (copyError) {
-      setError(`Could not copy sanitized logs: ${String(copyError)}`);
+      setError(`Could not copy sanitized logs: ${errorMessage(copyError)}`);
     }
   }
 
@@ -50,7 +51,7 @@ export function ActivityView({ snapshot, active }: ActivityViewProps) {
     <div className="activity-view">
       <section className="hero-card">
         <div className="hero-copy"><span className="feature-icon"><ActivityIcon /></span><div><h2>Engine activity and sanitized logs</h2><p>Recent engine events refresh every five seconds. Credentials and proxy URIs are redacted before they cross into the UI.</p></div></div>
-        <div className="hero-meta"><span>{snapshot?.status.state ?? "detached"}</span><span>{logs?.lines.length ?? 0} lines</span>{logs?.truncated && <span>Tail view</span>}</div>
+        <div className="hero-meta"><span>{enginePresentation(engineState.phase).shortLabel}</span><span>{logs?.lines.length ?? 0} lines</span>{logs?.truncated && <span>Tail view</span>}</div>
       </section>
       <section className="panel log-panel">
         <div className="panel-heading">

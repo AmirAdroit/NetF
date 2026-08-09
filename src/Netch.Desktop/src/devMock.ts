@@ -1,10 +1,12 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
 import type {
   EngineSettings,
   EngineSnapshot,
   ModeDetail,
   ModeEditRequest,
 } from "./engine";
+import type { DesktopSettings } from "./desktop";
 
 const modeNames = [
   ["Age of Empires IV", "built-in"],
@@ -73,10 +75,29 @@ let settings: EngineSettings = {
   tcpFastOpen: false,
 };
 
+let desktopSettings: DesktopSettings = {
+  schemaVersion: 1,
+  runAtWindowsLogin: false,
+};
+
 export async function installDevelopmentMock() {
   mockIPC((command, args) => {
     const payload = args as Record<string, unknown> | undefined;
-    if (command === "runtime_info") return { runtimeRoot: "C:\\Users\\Demo\\AppData\\Local\\Netch Modern\\runtime", runtimeVersion: "0.1.0" };
+    if (command === "desktop_startup_status_snapshot") return { phase: "ready", message: "NetF is ready", elapsedMs: 420, retryable: false };
+    if (command === "engine_runtime_state") return { phase: snapshot.status.state, active: snapshot.status.state === "connected", message: snapshot.status.message, updatedAtMs: Date.now() };
+    if (command === "retry_desktop_startup") return { phase: "ready", message: "NetF is ready", elapsedMs: 420, retryable: false };
+    if (command === "runtime_info") return {
+      runtimeRoot: "C:\\Users\\Demo\\AppData\\Local\\NetF\\runtime",
+      runtimeVersion: "0.1.0",
+      backend: {
+        id: "netch-compat",
+        displayName: "Netch compatibility engine",
+        version: "0.1.0",
+        apiVersion: 1,
+        capabilities: ["snapshot", "status", "connect", "disconnect"],
+        components: [],
+      },
+    };
     if (command === "engine_snapshot") return snapshot;
     if (command === "mode_detail") return details.get(Number(payload?.modeId));
     if (command === "engine_logs") return {
@@ -94,6 +115,18 @@ export async function installDevelopmentMock() {
     if (command === "update_engine_settings") {
       settings = payload?.settings as EngineSettings;
       return settings;
+    }
+    if (command === "desktop_settings") return desktopSettings;
+    if (command === "desktop_autostart_status") return {
+      enabled: desktopSettings.runAtWindowsLogin,
+      matchesCurrentExecutable: desktopSettings.runAtWindowsLogin,
+      taskName: "NetF Startup",
+      registeredExecutable: desktopSettings.runAtWindowsLogin ? "C:\\Program Files\\NetF\\NetF.exe" : null,
+      message: desktopSettings.runAtWindowsLogin ? "Registered and verified" : "Not registered",
+    };
+    if (command === "update_desktop_settings") {
+      desktopSettings = payload?.settings as DesktopSettings;
+      return desktopSettings;
     }
     if (command === "save_mode") {
       const request = payload?.request as ModeEditRequest;
@@ -119,9 +152,17 @@ export async function installDevelopmentMock() {
       const target = details.get(Number(payload?.targetModeId))!;
       return { mode: target, addedHandleRules: 2, addedBypassRules: 1, createdCopy: !target.editableInPlace, snapshot };
     }
-    if (command === "connect_profile") return { state: "connected", message: "Connected" };
-    if (command === "disconnect_profile") return { state: "stopped", message: "Stopped" };
+    if (command === "connect_profile") {
+      snapshot = { ...snapshot, status: { state: "connected", message: "Connected" } };
+      void emit("engine-status-changed", { phase: "connected", active: true, message: "Connected", updatedAtMs: Date.now() });
+      return snapshot.status;
+    }
+    if (command === "disconnect_profile") {
+      snapshot = { ...snapshot, status: { state: "stopped", message: "Stopped" } };
+      void emit("engine-status-changed", { phase: "stopped", active: false, message: "Stopped", updatedAtMs: Date.now() });
+      return snapshot.status;
+    }
     if (command.startsWith("plugin:dialog|")) return null;
     throw new Error(`Development mock does not implement ${command}`);
-  });
+  }, { shouldMockEvents: true });
 }

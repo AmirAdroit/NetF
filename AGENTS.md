@@ -4,8 +4,8 @@
 
 This repository modernizes the GPL-3.0 Netch Windows proxy client while
 preserving compatibility and clearly crediting upstream. The current WinForms
-application is the behavioral baseline; `src/Netch.Desktop` is the new Tauri 2
-desktop workspace.
+application is the behavioral baseline; `src/Netch.Desktop` is the NetF Tauri 2
+desktop workspace. NetF is a distinct fork identity, not an official Netch release.
 
 ## Non-negotiable rules
 
@@ -30,6 +30,8 @@ desktop workspace.
 - `src/Netch.Desktop/src/`: React presentation and client-side view state only.
 - `src/Netch.Desktop/src-tauri/src/commands/`: narrow IPC command adapters.
 - `src/Netch.Desktop/src-tauri/src/core/`: UI-independent, unit-tested logic.
+- New engine implementations must sit behind `EngineBackend`; do not expose
+  compatibility-engine names or wire shapes to React.
 - `Netch.EngineHost/`: bounded JSON-line adapter only; do not add general
   command execution or return raw credentials.
 - `Netch/Forms/`: legacy presentation; new domain logic must not be added here.
@@ -93,9 +95,9 @@ dotnet test .\Tests\Tests.csproj -c Release
 - The compatibility application and tests target pinned .NET 10 LTS; remaining
   obsolete API and nullable warnings are tracked modernization debt.
 - Several engine classes directly call WinForms through `Global.MainForm`.
-- The headless bridge supports owned-runtime snapshot/import/connect/disconnect,
-  but the app remains elevated until a separately authenticated privileged
-  broker exists.
+- The headless bridge supports the owned runtime, typed backend handshake,
+  operational views, tray lifecycle, and verified Windows auto-start, but the
+  app remains elevated until a separately authenticated privileged broker exists.
 - The test suite now covers configuration durability and selected proxy-core
   configs/loopback TCP traffic, but still lacks privileged Windows regression
   and recovery coverage.
