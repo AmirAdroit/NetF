@@ -74,6 +74,10 @@ name and compatibility policy.
 
 ### Fixed
 
+- Restored current GitHub Actions compatibility and made legacy provider builds
+  deterministic by pinning their declared Go toolchain and avoiding unbounded
+  dependency upgrades. Legacy Netch release packaging is now manual-only so it
+  cannot collide with NetF releases.
 - Ignore legacy native DLL/helper stdout noise in the supervised engine
   protocol, bound response waits, and keep Stop available when a connection
   result is uncertain. This prevents a helper log line from wedging Connect and

@@ -11,6 +11,22 @@ $expectedSha256 = 'd004c39288ce9ada487c6f398c7c545f7d749e44bdfdd59dbc9f865afba4e
 $artifactUrl = "https://github.com/XTLS/Xray-core/releases/download/$version/$artifactName"
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
 
+function Get-Sha256([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 if (Test-Path -LiteralPath $resolvedOutput) {
     throw "Output directory already exists: $resolvedOutput"
 }
@@ -20,7 +36,7 @@ $archivePath = Join-Path $resolvedOutput $artifactName
 
 Invoke-WebRequest -Uri $artifactUrl -OutFile $archivePath
 
-$actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$actualSha256 = Get-Sha256 $archivePath
 if ($actualSha256 -ne $expectedSha256) {
     throw "Xray archive checksum mismatch. Expected $expectedSha256 but received $actualSha256."
 }

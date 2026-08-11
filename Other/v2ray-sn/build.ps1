@@ -23,7 +23,6 @@ $Env:GOROOT_FINAL='/usr'
 
 $Env:GOOS='windows'
 $Env:GOARCH='amd64'
-go get -u ./...
-go mod tidy
+go mod tidy -compat=1.18
 go build -a -trimpath -asmflags '-s -w' -ldflags '-s -w -buildid=' -o '..\..\release\v2ray-sn.exe' '.\main'
 exit $lastExitCode
