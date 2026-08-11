@@ -95,6 +95,16 @@ pub struct ModeMergeResult {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ModeDeleteResult {
+    pub deleted_source: String,
+    pub deleted_remark: String,
+    pub origin: String,
+    pub backup_directory: String,
+    pub snapshot: EngineSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EngineLogResult {
     pub lines: Vec<String>,
     pub truncated: bool,
@@ -127,6 +137,9 @@ pub struct EngineSettings {
 pub struct EngineAttachment {
     pub info: BackendInfo,
     pub snapshot: EngineSnapshot,
+    pub spawn_ms: u64,
+    pub handshake_ms: u64,
+    pub snapshot_ms: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -209,8 +222,12 @@ impl EngineSupervisor {
             previous.shutdown();
         }
 
+        let spawn_started = Instant::now();
         let mut process = EngineProcess::start(&host_path, &runtime_root)?;
+        let spawn_ms = elapsed_ms(spawn_started);
+        let handshake_started = Instant::now();
         let hello: HelloResponse = process.request("hello", json!({}))?;
+        let handshake_ms = elapsed_ms(handshake_started);
         if hello.api_version != SUPPORTED_ENGINE_API_VERSION {
             return Err(EngineError::Protocol(format!(
                 "unsupported engine API version {}; NetF supports version {}",
@@ -224,7 +241,9 @@ impl EngineSupervisor {
                 )));
             }
         }
+        let snapshot_started = Instant::now();
         let snapshot = process.request("snapshot", json!({}))?;
+        let snapshot_ms = elapsed_ms(snapshot_started);
 
         let info = BackendInfo {
             id: hello.backend_id,
@@ -236,7 +255,13 @@ impl EngineSupervisor {
         };
 
         *current = Some(process);
-        Ok(EngineAttachment { info, snapshot })
+        Ok(EngineAttachment {
+            info,
+            snapshot,
+            spawn_ms,
+            handshake_ms,
+            snapshot_ms,
+        })
     }
 
     pub fn try_status(&self) -> Result<Option<EngineStatus>, EngineError> {
@@ -306,6 +331,10 @@ impl EngineSupervisor {
                 json!({ "sourceModeId": source_mode_id, "targetModeId": target_mode_id }),
             )
         })
+    }
+
+    pub fn delete_mode(&self, mode_id: usize) -> Result<ModeDeleteResult, EngineError> {
+        self.with_process(|process| process.request("deleteMode", json!({ "modeId": mode_id })))
     }
 
     pub fn logs(&self, limit: usize) -> Result<EngineLogResult, EngineError> {
@@ -594,12 +623,16 @@ fn parse_protocol_line(line: &str) -> Option<WireResponse> {
 fn request_timeout(method: &str) -> Duration {
     match method {
         "connect" | "importLegacy" => Duration::from_secs(60),
-        "saveMode" | "mergeMode" | "updateSettings" | "configureDesktopStartup" => {
+        "saveMode" | "mergeMode" | "deleteMode" | "updateSettings" | "configureDesktopStartup" => {
             Duration::from_secs(30)
         }
         "disconnect" | "shutdown" => Duration::from_secs(30),
         _ => Duration::from_secs(10),
     }
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 impl Drop for EngineProcess {
@@ -679,10 +712,10 @@ fn locate_engine_host() -> Result<PathBuf, EngineError> {
     });
     let development = std::env::current_dir()
         .ok()
-        .map(|path| path.join("src-tauri/binaries/netch-engine-host.exe"));
+        .map(|path| path.join("src-tauri/binaries/netch-engine-host-x86_64-pc-windows-msvc.exe"));
     let cargo_development = std::env::current_dir()
         .ok()
-        .map(|path| path.join("binaries/netch-engine-host.exe"));
+        .map(|path| path.join("binaries/netch-engine-host-x86_64-pc-windows-msvc.exe"));
 
     beside_app
         .into_iter()
@@ -731,6 +764,10 @@ mod tests {
         let attachment = supervisor
             .attach(directory.path())
             .expect("engine snapshot");
+        eprintln!(
+            "engine timing: spawn={} ms handshake={} ms snapshot={} ms",
+            attachment.spawn_ms, attachment.handshake_ms, attachment.snapshot_ms
+        );
         let snapshot = attachment.snapshot;
 
         assert_eq!(attachment.info.id, "netch-compat");
@@ -888,5 +925,49 @@ mod tests {
         assert_eq!(merged.mode.origin, "user");
         assert_eq!(merged.mode.handle.len(), 2);
         assert!(owned.path().join("mode/Custom/User/Beta.json").is_file());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn owned_engine_deletes_a_built_in_mode_through_typed_ipc() {
+        let owned = tempdir().expect("owned runtime");
+        fs::create_dir_all(owned.path().join("data")).unwrap();
+        fs::create_dir_all(owned.path().join("mode/Custom")).unwrap();
+        fs::create_dir_all(owned.path().join("bin")).unwrap();
+        fs::write(owned.path().join("data/settings.json"), "{}").unwrap();
+        fs::write(
+            owned.path().join("mode/Disposable.json"),
+            r#"{
+              "type": "ProcessMode",
+              "remark": { "en": "Disposable" },
+              "handle": ["disposable\\.exe"],
+              "bypass": []
+            }"#,
+        )
+        .unwrap();
+
+        let supervisor = EngineSupervisor::default();
+        let snapshot = supervisor
+            .attach(owned.path())
+            .expect("owned engine")
+            .snapshot;
+        let mode_id = snapshot
+            .modes
+            .iter()
+            .find(|mode_| mode_.remark == "Disposable")
+            .expect("mode")
+            .id;
+
+        let deleted = supervisor.delete_mode(mode_id).expect("mode deletion");
+        assert_eq!(deleted.deleted_remark, "Disposable");
+        assert_eq!(deleted.origin, "built-in");
+        assert!(deleted.snapshot.modes.is_empty());
+        assert!(!owned.path().join("mode/Disposable.json").exists());
+        assert!(owned.path().join("data/deleted-modes.json").is_file());
+        assert!(Path::new(&deleted.backup_directory).is_dir());
+        assert!(matches!(
+            supervisor.delete_mode(mode_id),
+            Err(EngineError::Rejected { .. })
+        ));
     }
 }

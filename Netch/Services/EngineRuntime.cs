@@ -37,6 +37,7 @@ public static class EngineRuntime
             EngineEvents.Observer = observer;
             await Configuration.LoadAsync();
             i18N.Load(Global.Settings.Language);
+            await ModeDeletionService.ApplyTombstonesAsync();
             ModeService.Instance.Load(notifyPresentation: false);
         }
         catch

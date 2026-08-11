@@ -1,6 +1,7 @@
 /.vs
 /.idea
 /release
+/deliverables
 /packages
 /TestResults
 /src/Netch.Desktop/node_modules

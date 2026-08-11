@@ -1,9 +1,9 @@
 use crate::core::desktop::{
-    DesktopController, DesktopError, EngineRuntimeState, RuntimeInfo, StartupSnapshot,
+    DesktopController, DesktopError, EngineRuntimeState, OwnedFolder, RuntimeInfo, StartupSnapshot,
 };
 use crate::core::engine::{
-    EngineLogResult, EngineSettings, EngineSnapshot, EngineStatus, LegacyImportResult, ModeDetail,
-    ModeEditRequest, ModeMergeResult, ModeSaveResult,
+    EngineLogResult, EngineSettings, EngineSnapshot, EngineStatus, LegacyImportResult,
+    ModeDeleteResult, ModeDetail, ModeEditRequest, ModeMergeResult, ModeSaveResult,
 };
 use crate::core::scanner::{self, ScanReport};
 use crate::core::settings::{DesktopSettings, DesktopStartupStatus};
@@ -60,6 +60,17 @@ pub fn retry_desktop_startup(
 #[tauri::command]
 pub fn runtime_info(state: State<'_, Arc<DesktopController>>) -> Result<RuntimeInfo, DesktopError> {
     state.runtime_info()
+}
+
+#[tauri::command]
+pub async fn open_owned_folder(
+    folder: OwnedFolder,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<(), DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || controller.open_owned_folder(folder))
+        .await
+        .map_err(|error| task_error("folder open", error))?
 }
 
 #[tauri::command]
@@ -183,6 +194,22 @@ pub async fn merge_modes(
     })
     .await
     .map_err(|error| task_error("mode merge", error))?
+}
+
+#[tauri::command]
+pub async fn delete_mode(
+    mode_id: usize,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ModeDeleteResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .delete_mode(mode_id)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("mode deletion", error))?
 }
 
 #[tauri::command]

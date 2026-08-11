@@ -14,6 +14,45 @@ public class XrayLoopbackTrafficTests
 {
     private const string XrayPathVariable = "NETCH_XRAY_PATH";
     private const string FixtureUuid = "feb54431-301b-52bb-a6dd-e1e93e81bb9e";
+    private static string? _isolatedDirectory;
+    private static string? _isolatedXrayPath;
+
+    [ClassInitialize]
+    public static void PrepareIsolatedXray(TestContext _)
+    {
+        var source = Environment.GetEnvironmentVariable(XrayPathVariable);
+        if (string.IsNullOrWhiteSpace(source) || !File.Exists(source))
+            return;
+        _isolatedDirectory = Path.Combine(Path.GetTempPath(), $"netch-xray-traffic-isolated-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_isolatedDirectory);
+        _isolatedXrayPath = Path.Combine(_isolatedDirectory, "xray.exe");
+        File.Copy(source, _isolatedXrayPath);
+        Assert.IsFalse(File.Exists(Path.Combine(_isolatedDirectory, "geoip.dat")));
+        Assert.IsFalse(File.Exists(Path.Combine(_isolatedDirectory, "geosite.dat")));
+    }
+
+    [ClassCleanup]
+    public static void CleanupIsolatedXray()
+    {
+        DeleteIsolatedDirectoryWithRetry(_isolatedDirectory);
+    }
+
+    private static void DeleteIsolatedDirectoryWithRetry(string? directory)
+    {
+        if (directory is null)
+            return;
+        for (var attempt = 1; Directory.Exists(directory); attempt++)
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 10)
+            {
+                Thread.Sleep(200);
+            }
+        }
+    }
 
     public static IEnumerable<object[]> ProtocolFixtures()
     {
@@ -28,7 +67,7 @@ public class XrayLoopbackTrafficTests
     [DynamicData(nameof(ProtocolFixtures))]
     public async Task GeneratedClientConfigCarriesLoopbackTrafficAsync(string protocol)
     {
-        var xrayPath = Environment.GetEnvironmentVariable(XrayPathVariable);
+        var xrayPath = _isolatedXrayPath;
         if (string.IsNullOrWhiteSpace(xrayPath))
             Assert.Inconclusive($"Set {XrayPathVariable} to run provider traffic tests.");
 

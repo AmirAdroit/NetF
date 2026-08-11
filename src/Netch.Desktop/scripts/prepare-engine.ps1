@@ -29,6 +29,9 @@ if (-not (Test-Path -LiteralPath $publishedHost -PathType Leaf)) {
 }
 
 Copy-Item -LiteralPath $publishedHost `
-    -Destination (Join-Path $binaryDirectory 'netch-engine-host.exe') -Force
-Copy-Item -LiteralPath $publishedHost `
     -Destination (Join-Path $binaryDirectory 'netch-engine-host-x86_64-pc-windows-msvc.exe') -Force
+
+$obsoleteDevelopmentHost = Join-Path $binaryDirectory 'netch-engine-host.exe'
+if (Test-Path -LiteralPath $obsoleteDevelopmentHost -PathType Leaf) {
+    Remove-Item -LiteralPath $obsoleteDevelopmentHost -Force
+}

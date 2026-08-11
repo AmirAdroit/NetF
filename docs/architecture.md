@@ -50,7 +50,7 @@ Netch engine/broker (.NET migration bridge)
 Native helpers and Windows networking primitives
 ```
 
-The compatibility preview currently runs the whole application elevated for
+The compatibility desktop currently runs the whole application elevated for
 parity with upstream. Its Rust adapter starts one fixed, bundled engine host;
 the webview receives no shell API and cannot supply the host executable or
 runtime path. Rust verifies a packaged SHA-256 manifest and installs the owned
@@ -122,11 +122,23 @@ The versioned IPC contract currently implements:
 
 - `hello`, `snapshot`, and owned-runtime legacy import;
 - `connect(server_id, mode_id)` and `disconnect`;
-- `modeDetail`, `saveMode`, and `mergeMode` for typed Process/TUN rules;
+- `modeDetail`, `saveMode`, `mergeMode`, and `deleteMode` for typed mode operations;
 - `settings` and `updateSettings` for the allowlisted operational subset;
 - `desktopStartupStatus` and `configureDesktopStartup` for one fixed, verified
   per-user Windows Scheduled Task;
 - `logs` for the bounded, redacted application-log tail.
+
+`openOwnedFolder` is a Rust/Tauri desktop command rather than an engine method.
+It accepts only the `modes` or `appData` enum and resolves the path from the
+owned runtime. Mode deletion accepts an integer ID, never a path, and is allowed
+only while stopped/failed. It flushes a timestamped backup before deletion;
+built-in relative paths are stored in an atomic schema-versioned tombstone file
+and applied before mode loading on every startup.
+
+Startup logs record settings, runtime verification/install, engine spawn,
+handshake, initial snapshot, and total duration. State transitions, generic
+cleanup failures, unexpected health failures, and aggregate serialized
+three-second probe timings are recorded without profile data or credentials.
 
 The Rust/Tauri layer mirrors these as narrow typed commands and selects the
 legacy import folder natively. Planned operations include server/subscription

@@ -6,7 +6,7 @@
 > its contributors. It is not an official Netch release and is not yet a
 > replacement for a known-good Netch installation.
 
-NetF preserves Netch's lightweight Windows proxy client behavior, including process-aware routing, TUN
+**NetF — Split tunneling for Windows** preserves Netch's lightweight Windows proxy client behavior, including process-aware routing, TUN
 routing, network sharing, multiple proxy protocols, and reusable mode files.
 This fork exists to preserve those useful behaviors while making the project
 maintainable, testable, secure, and pleasant to use on current Windows systems.
@@ -25,7 +25,7 @@ shell and a UI-independent engine boundary are developed alongside them.
   executables and emits rules compatible with legacy process-mode files.
 - The new scanner has deterministic output, skips directory links/reparse
   points, reports inaccessible paths, and enforces a configurable result limit.
-- The preview follows the Windows theme by default and also supports persisted
+- The desktop follows the Windows theme by default and also supports persisted
   light or dark appearance overrides.
 - Existing compatible SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard
   profiles can use the pinned Xray `v26.3.27` provider. Known-incompatible
@@ -38,10 +38,15 @@ shell and a UI-independent engine boundary are developed alongside them.
   Rust adapter. The modern Servers tab runs a versioned fork-owned runtime,
   lists non-secret server/mode summaries, imports legacy data, and requests
   connect/disconnect.
-- The Modes tab searches and sorts the complete library alphabetically, marks
+- The compact Modes Library searches and sorts the complete library alphabetically, marks
   built-in, imported, and user-owned modes, and edits Process/TUN rules.
   Built-ins use copy-on-customize; imported and user modes are backed up and
   atomically replaced. Compatible modes can be merged with deduplicated rules.
+  Every origin can be deleted after confirmation while stopped/failed; deletion
+  creates a flushed timestamped backup, and built-ins use a versioned tombstone
+  so runtime preparation does not silently restore them.
+- The Modes Scanner is a separate compact workspace, preserving bounded,
+  deterministic executable discovery without keeping scanner state in the root UI.
 - Overview reports engine/runtime readiness and mode ownership. Activity shows
   a bounded, credential-redacted log tail that can be copied for diagnostics.
 - Settings exposes a validated operational subset of listener, redirector,
@@ -86,7 +91,9 @@ See [architecture](docs/architecture.md), the
 [modernization roadmap](docs/modernization-roadmap.md), and
 [security notes](docs/security.md) before changing networking or privilege code.
 Operational failures are covered in [troubleshooting](docs/troubleshooting.md)
-and the [Windows smoke test](docs/windows-smoke-test.md).
+and the [Windows smoke test](docs/windows-smoke-test.md). See the measured
+[performance review](docs/performance-review.md) and ranked
+[optimization backlog](docs/optimization-backlog.md) for this milestone.
 
 ## Repository layout
 
@@ -146,6 +153,10 @@ cd src\Netch.Desktop\src-tauri
 cargo test
 ```
 
+The elevated all-features GUI test binary may require an elevated runner. The
+library suite, including real EngineHost IPC, can be run explicitly with
+`cargo test --lib --all-features`.
+
 Build the complete debug executable without an installer:
 
 ```powershell
@@ -190,13 +201,21 @@ they block a public release until replaced or fully traced and licensed.
 
 Legacy settings are stored under `data/settings.json`; mode definitions live
 under `mode/` in a release and under `Storage/mode/` in this repository. Do not
-point early preview builds at the only copy of a real configuration.
+point development builds at the only copy of a real configuration.
 Configuration saves create `settings.json.bak`, flush and re-read a temporary
 file in the same directory, validate it, and atomically replace the destination.
 Imported modes are kept under `mode/Custom/Imported`; modes created or cloned by
 the modern app live under `mode/Custom/User`. Re-import preserves the user-owned
 directory. Mode updates follow the same backup, temporary-file validation, and
 atomic replacement policy.
+
+The modern runtime intentionally omits Xray `geoip.dat` and `geosite.dat`
+because NetF currently selects applications, not user domain/IP rule lists.
+It also omits inactive `aiodns.conf` because no aiodns helper is distributed.
+Pinned source/cache artifacts remain available for a future optional feature.
+
+The frontend can request only two native folder actions: `modes` and `appData`.
+Rust resolves and validates both; React cannot provide a path.
 
 The new scanner emits the same kind of C++ regex fragments as the old scanner:
 it uses executable filenames such as `game\.exe`, not absolute paths. The mode

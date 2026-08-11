@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canConnect,
+  canMutateModes,
   canStopEngine,
   filterModes,
   modeLabel,
@@ -55,6 +56,13 @@ describe("engine view model", () => {
         false,
       ),
     ).toBe(true);
+  });
+
+  it("allows mode mutation only while the engine is stopped or failed", () => {
+    expect(canMutateModes(snapshot)).toBe(true);
+    expect(canMutateModes({ ...snapshot, status: { state: "failed", message: "Failed" } })).toBe(true);
+    expect(canMutateModes({ ...snapshot, status: { state: "connected", message: "Connected" } })).toBe(false);
+    expect(canMutateModes({ ...snapshot, status: { state: "unknown", message: "Unknown" } })).toBe(false);
   });
 
   it("searches all mode metadata and sorts labels alphabetically", () => {

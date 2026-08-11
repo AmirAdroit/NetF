@@ -10,6 +10,45 @@ namespace Tests;
 public class XrayProviderCompatibilityTests
 {
     private const string XrayPathVariable = "NETCH_XRAY_PATH";
+    private static string? _isolatedDirectory;
+    private static string? _isolatedXrayPath;
+
+    [ClassInitialize]
+    public static void PrepareIsolatedXray(TestContext _)
+    {
+        var source = Environment.GetEnvironmentVariable(XrayPathVariable);
+        if (string.IsNullOrWhiteSpace(source) || !File.Exists(source))
+            return;
+        _isolatedDirectory = Path.Combine(Path.GetTempPath(), $"netch-xray-isolated-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_isolatedDirectory);
+        _isolatedXrayPath = Path.Combine(_isolatedDirectory, "xray.exe");
+        File.Copy(source, _isolatedXrayPath);
+        Assert.IsFalse(File.Exists(Path.Combine(_isolatedDirectory, "geoip.dat")));
+        Assert.IsFalse(File.Exists(Path.Combine(_isolatedDirectory, "geosite.dat")));
+    }
+
+    [ClassCleanup]
+    public static void CleanupIsolatedXray()
+    {
+        DeleteIsolatedDirectoryWithRetry(_isolatedDirectory);
+    }
+
+    private static void DeleteIsolatedDirectoryWithRetry(string? directory)
+    {
+        if (directory is null)
+            return;
+        for (var attempt = 1; Directory.Exists(directory); attempt++)
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 10)
+            {
+                Thread.Sleep(200);
+            }
+        }
+    }
 
     public static IEnumerable<object[]> ExistingProtocolFixtures()
     {
@@ -111,7 +150,7 @@ public class XrayProviderCompatibilityTests
     [DynamicData(nameof(ExistingProtocolFixtures))]
     public async Task PinnedXrayAcceptsExistingGeneratedConfigAsync(string protocol, Server server)
     {
-        var xrayPath = Environment.GetEnvironmentVariable(XrayPathVariable);
+        var xrayPath = _isolatedXrayPath;
         if (string.IsNullOrWhiteSpace(xrayPath))
             Assert.Inconclusive($"Set {XrayPathVariable} to run provider integration tests.");
 

@@ -98,6 +98,7 @@ export async function installDevelopmentMock() {
         components: [],
       },
     };
+    if (command === "open_owned_folder") return null;
     if (command === "engine_snapshot") return snapshot;
     if (command === "mode_detail") return details.get(Number(payload?.modeId));
     if (command === "engine_logs") return {
@@ -151,6 +152,29 @@ export async function installDevelopmentMock() {
     if (command === "merge_modes") {
       const target = details.get(Number(payload?.targetModeId))!;
       return { mode: target, addedHandleRules: 2, addedBypassRules: 1, createdCopy: !target.editableInPlace, snapshot };
+    }
+    if (command === "delete_mode") {
+      const modeId = Number(payload?.modeId);
+      const deleted = details.get(modeId)!;
+      details.delete(modeId);
+      const remaining = snapshot.modes
+        .filter((mode) => mode.id !== modeId)
+        .map((mode, id) => ({ ...mode, id }));
+      const remapped = new Map<number, ModeDetail>();
+      for (const mode of remaining) {
+        const original = [...details.values()].find((item) => item.source === mode.source);
+        if (original) remapped.set(mode.id, { ...original, id: mode.id });
+      }
+      details.clear();
+      remapped.forEach((value, key) => details.set(key, value));
+      snapshot = { ...snapshot, modes: remaining };
+      return {
+        deletedSource: deleted.source,
+        deletedRemark: deleted.remark,
+        origin: deleted.origin,
+        backupDirectory: "C:\\Users\\Demo\\AppData\\Local\\NetF\\runtime\\data\\deleted-mode-backups\\sample",
+        snapshot,
+      };
     }
     if (command === "connect_profile") {
       snapshot = { ...snapshot, status: { state: "connected", message: "Connected" } };

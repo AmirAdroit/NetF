@@ -30,12 +30,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "externalBin": ["binaries/netch-engine-host"],
     "resources": ["runtime-template/**/*"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "copyright": "Copyright (c) 2019 AmazingDM and Contributors; fork contributors",
-    "shortDescription": "NetF, a modernized fork of the Netch Windows proxy client",
+    "shortDescription": "NetF — Split tunneling for Windows",
     "windows": {
       "nsis": {
         "installerHooks": "./windows/hooks.nsh"

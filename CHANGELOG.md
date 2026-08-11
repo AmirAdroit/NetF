@@ -9,6 +9,8 @@ name and compatibility policy.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-11
+
 ### Added
 
 - Tauri 2, React, and TypeScript desktop preview workspace.
@@ -33,6 +35,12 @@ name and compatibility policy.
 - Development-only Tauri IPC fixture for browser-level UI and responsive-layout
   regression checks.
 - Architecture, security, compatibility, roadmap, and agent documentation.
+- Compact Library/Scanner Modes workspaces, Midnight Cobalt light/dark tokens,
+  and fixed native actions for the modes and app-data directories.
+- Confirmed deletion for built-in/imported/user modes with typed IPC, durable
+  backups, startup tombstones, path/reparse validation, and restart coverage.
+- Credential-free startup, handshake, state-transition, cleanup, and aggregate
+  health-probe timing logs plus a read-only process/artifact sampler.
 
 ### Changed
 
@@ -60,6 +68,9 @@ name and compatibility policy.
   imported for compatibility.
 - Keep all mode summaries case-insensitively alphabetized across the engine,
   Rust adapter, and UI.
+- Stop distributing Xray geo databases and inactive aiodns configuration in the
+  modern application-only split-tunneling runtime; keep pinned source caches.
+- Prepare one target-triple EngineHost sidecar instead of two identical copies.
 
 ### Fixed
 

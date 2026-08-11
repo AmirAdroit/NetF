@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { LayersIcon, SearchIcon } from "./icons";
 import {
+  canMutateModes,
   filterModes,
   modeLabel,
   modeOriginLabel,
   type EngineSnapshot,
+  type ModeDeleteResult,
   type ModeDetail,
   type ModeEditRequest,
   type ModeMergeResult,
@@ -41,6 +43,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ModeDetail | null>(null);
 
   const filteredModes = useMemo(() => filterModes(snapshot.modes, query), [snapshot.modes, query]);
   const selectedSummary = snapshot.modes.find((mode) => mode.id === selectedId) ?? null;
@@ -49,7 +52,9 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
       mode.id !== selectedId && mode.type === detail?.type && mode.type !== "ShareMode"),
     [snapshot.modes, selectedId, detail?.type],
   );
-  const connectionLocked = snapshot.status.state !== "stopped" && snapshot.status.state !== "failed";
+  const connectionLocked = !canMutateModes(snapshot);
+  const handleRules = useMemo(() => textToRules(handleText), [handleText]);
+  const bypassRules = useMemo(() => textToRules(bypassText), [bypassText]);
 
   useEffect(() => {
     if (selectedId === null && detail?.id === -1) return;
@@ -77,6 +82,15 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
       cancelled = true;
     };
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!deleteTarget) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setDeleteTarget(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [deleteTarget]);
 
   function startNew(type: "ProcessMode" | "TunMode") {
     const newMode: ModeDetail = {
@@ -107,8 +121,8 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
       modeId: detail.id >= 0 ? detail.id : null,
       type: detail.type as "ProcessMode" | "TunMode",
       remark,
-      handle: textToRules(handleText),
-      bypass: textToRules(bypassText),
+      handle: handleRules,
+      bypass: bypassRules,
     };
     try {
       setBusy(true);
@@ -156,6 +170,25 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
     }
   }
 
+  async function deleteMode() {
+    if (!deleteTarget || busy || connectionLocked) return;
+    try {
+      setBusy(true);
+      setError("");
+      setMessage("");
+      const deleted = await invoke<ModeDeleteResult>("delete_mode", { modeId: deleteTarget.id });
+      setDeleteTarget(null);
+      setDetail(null);
+      setSelectedId(deleted.snapshot.modes[0]?.id ?? null);
+      onSnapshot(deleted.snapshot);
+      setMessage(`${deleted.deletedRemark} was deleted. A durable backup was kept.`);
+    } catch (deleteError) {
+      setError(errorMessage(deleteError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="mode-manager-grid" aria-label="Mode library and editor">
       <div className="panel mode-library">
@@ -190,7 +223,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
               type="button"
             >
               <span className={`origin-dot ${mode.origin}`} />
-              <span><strong>{modeLabel(mode)}</strong><small>{mode.source}</small></span>
+              <span><strong>{modeLabel(mode)}</strong><small>{mode.type === "ProcessMode" ? "Process" : mode.type === "TunMode" ? "TUN" : "Sharing"} · {mode.handleCount + mode.bypassCount} rules</small></span>
               <span className={`origin-badge ${mode.origin}`}>{modeOriginLabel(mode.origin)}</span>
             </button>
           ))}
@@ -204,7 +237,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
             <span className="step-label">Configuration editor</span>
             <h2>{detail ? remark || "New mode" : "Choose a mode"}</h2>
           </div>
-          {detail && <span className={`origin-badge ${detail.origin}`}>{modeOriginLabel(detail.origin)}</span>}
+          {detail && <div className="mode-heading-actions"><span className={`origin-badge ${detail.origin}`}>{modeOriginLabel(detail.origin)}</span>{detail.id >= 0 && <button className="danger-action compact-danger" disabled={busy || connectionLocked} onClick={() => setDeleteTarget(detail)} type="button">Delete</button>}</div>}
         </div>
 
         {!detail ? (
@@ -226,11 +259,11 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
             </label>
             <div className="rule-editor-grid">
               <label>
-                Handled rules <span>{textToRules(handleText).length}</span>
+                Handled rules <span>{handleRules.length}</span>
                 <textarea value={handleText} onChange={(event) => setHandleText(event.target.value)} spellCheck={false} placeholder="game\\.exe" />
               </label>
               <label>
-                Bypass rules <span>{textToRules(bypassText).length}</span>
+                Bypass rules <span>{bypassRules.length}</span>
                 <textarea value={bypassText} onChange={(event) => setBypassText(event.target.value)} spellCheck={false} placeholder="!launcher\\.exe" />
               </label>
             </div>
@@ -258,6 +291,19 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
         {message && <div className="success-banner" role="status">{message}</div>}
         {busy && selectedSummary && <span className="panel-state">Loading {modeLabel(selectedSummary)}…</span>}
       </div>
+      {deleteTarget && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}>
+          <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-mode-title" aria-describedby="delete-mode-description">
+            <span className="danger-kicker">Permanent library change</span>
+            <h2 id="delete-mode-title">Delete “{deleteTarget.remark}”?</h2>
+            <p id="delete-mode-description">NetF will create a flushed timestamped backup first. Built-in deletion persists across runtime updates until its tombstone is removed manually.</p>
+            <div className="dialog-actions">
+              <button autoFocus className="secondary-action" onClick={() => setDeleteTarget(null)} type="button">Cancel</button>
+              <button className="danger-action" disabled={busy || connectionLocked} onClick={deleteMode} type="button">{busy ? "Deleting…" : "Delete mode"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

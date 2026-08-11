@@ -1,6 +1,6 @@
 # NetF Windows smoke test
 
-Use this checklist before treating the Tauri compatibility preview as a daily
+Use this checklist before treating the Tauri compatibility desktop as a daily
 driver. Run destructive recovery cases only in a disposable Windows VM with a
 snapshot. Do not test forced termination on a host where stale DNS or routes
 would interrupt important work.
@@ -9,9 +9,9 @@ would interrupt important work.
 
 1. Close every running Netch process.
 2. Keep a known-good Netch installation available as an import source. The
-   preview must read only its `data/settings.json` and `mode/Custom` content;
+   desktop must read only its `data/settings.json` and `mode/Custom` content;
    its `bin` directory must not be copied or executed.
-3. Build the preview:
+3. Build the desktop:
 
    ```powershell
    cd src\Netch.Desktop
@@ -55,10 +55,10 @@ Use a profile already proven in the legacy client. Test one mode at a time:
 
 1. Record baseline routes, DNS servers, active adapters, relevant services, and
    outbound IP/DNS behavior.
-2. Connect from the preview and verify the intended application traffic, TCP,
+2. Connect from the desktop and verify the intended application traffic, TCP,
    UDP where applicable, and DNS behavior. Confirm unrelated applications
    follow the mode's bypass rules.
-3. Disconnect from the preview. Verify proxy-core/helper processes exit and the
+3. Disconnect from the desktop. Verify proxy-core/helper processes exit and the
    recorded route, DNS, adapter, firewall, and service state returns to baseline.
 4. Repeat for process mode, TUN mode, and sharing mode only when their native
    dependencies are present.
@@ -81,3 +81,61 @@ Use a profile already proven in the legacy client. Test one mode at a time:
 Record the Windows build, selected server type, transport/security settings,
 mode type, helper hashes, result, cleanup result, and relevant redacted logs.
 Any cleanup failure blocks calling the modern desktop stable.
+
+## NetF optimization milestone acceptance
+
+Run the following in order and retain exact timings, process lists, screenshots,
+and redacted logs with the test record.
+
+1. Remove or rename the existing NetF local app-data runtime only in a disposable
+   VM after making a backup. Time first launch from process creation to **Ready**.
+   Exit normally, time the next warm launch, and record the settings, runtime,
+   engine-spawn, handshake, snapshot, and total timing lines from Activity.
+2. Confirm the runtime contains no `geoip.dat`, `geosite.dat`, or `aiodns.conf`.
+   Confirm there is one `netch-engine-host.exe` process and no visible console
+   window. Run `scripts\measure-performance.ps1 -SampleSeconds 600` while stopped;
+   record working/private memory, process count, average idle CPU, and the
+   aggregate three-second health-probe timing after at least ten minutes.
+3. At 1240×820 and 920×660, test Library and Scanner in light/dark/system themes.
+   Verify no horizontal page scrolling at minimum size, visible keyboard focus,
+   and correct blue selection, green connected/success, amber transition/warning,
+   and red failure/destructive semantics.
+4. Create Process and TUN modes. Edit each, merge same-type rules, restart, and
+   verify names/rules persist. For built-in, imported, and user origins: open
+   Delete, choose Cancel, and verify no IPC-visible change; reopen, confirm, and
+   verify a timestamped backup. Restart and verify built-ins remain deleted.
+   Repeat with the engine connected and confirm deletion is rejected.
+5. Inspect `data/deleted-modes.json`: schema version must be 1 and entries must
+   be relative mode paths. In a disposable fixture, test invalid IDs, `..`, an
+   absolute path, mixed-case extensions, file/directory reparse points, a stale
+   tombstone, and a corrupt tombstone. NetF must fail closed without deleting an
+   outside file. Restore fixtures from backup afterward.
+6. Click **Open modes folder** and **Open app data folder**. Verify they open only
+   NetF-owned directories. Attempt malformed/unknown enum values with an IPC test
+   harness and verify rejection; there must be no frontend API accepting a path.
+7. In Scanner, test nested executables, case-insensitive `.EXE`, duplicate names,
+   inaccessible directories, directory reparse points, an empty directory, and
+   result limits 1 and 5000. Verify deterministic sorting/rules, warnings, checkbox
+   selection, and copied CRLF rule text. No executable may start or change.
+8. With the geo files absent, connect each supported Xray profile. Include at
+   least one hostname-based server endpoint and verify Windows DNS resolution,
+   server-route reachability/bypass, and normal traffic. Verify unsupported
+   profiles remain on the compatibility provider rather than failing open.
+9. Run Process routing with a selected application and unrelated LAN/browser
+   traffic. Verify TCP, UDP where supported, DNS, LAN access, and bypass behavior.
+   Disconnect and compare routes, DNS servers, firewall state, services, helpers,
+   and outbound behavior byte-for-byte or command-for-command with baseline.
+10. Run the equivalent TUN test, including Wintun adapter creation/removal,
+    default/specific server route, IPv4/IPv6, LAN bypass, DNS setup, and complete
+    restoration after disconnect, connect failure, and unavailable helper.
+11. While connected, hide/restore through the tray, start a second instance,
+    choose normal Exit, kill Xray, kill EngineHost, then force-kill the desktop in
+    separate VM snapshots. Verify focus behavior, explicit failed/unknown state,
+    no orphan helpers, cleanup evidence, and no unsafe automatic reconnection.
+12. Test offline startup, IPv6-only/disabled combinations, Wi-Fi plus Ethernet,
+    VPN/multiple NICs, Windows sign-in auto-start, reboot after a forced failure,
+    helper/driver absence, uninstall, and reinstall. Auto-start must never connect.
+13. Search copied Activity output and engine logs for passwords, proxy URIs,
+    UUIDs, tokens, private/pre-shared keys, authorization headers, and server
+    secrets. Any credential or incomplete route/DNS/firewall cleanup is a release
+    blocker and requires restoring the VM snapshot before further connection tests.

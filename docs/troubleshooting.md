@@ -39,3 +39,24 @@ Include the NetF version, startup phase, state label, mode type,
 missing-capability list, and copied sanitized Activity log. Never publish raw
 settings, subscription URLs, credentials, UUIDs, private keys, or unredacted
 engine command lines.
+
+## A deleted built-in mode returned
+
+Current builds store built-in deletions in
+`data/deleted-modes.json` and apply them before mode loading. Use **Modes → Open
+modes folder** and **Settings → Open app data folder** rather than guessing the
+runtime path. If the tombstone file is missing or invalid, do not edit it while
+NetF is running; preserve the file and sanitized Activity log for diagnosis.
+Deleted files are backed up under `data/deleted-mode-backups/<UTC timestamp>/`.
+
+To intentionally restore a built-in, close NetF, back up the app-data directory,
+remove only that relative entry from the tombstone with valid schema/versioned
+JSON, then let runtime preparation restore the packaged template. Never replace
+the whole data directory or delete the only backup.
+
+## Startup or idle performance investigation
+
+Activity contains credential-free timing lines for startup stages and aggregate
+health probes. With NetF manually started and stopped, run
+`src\Netch.Desktop\scripts\measure-performance.ps1 -SampleSeconds 600` to
+capture process count, memory, and idle CPU without changing engine state.

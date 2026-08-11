@@ -38,8 +38,8 @@
     },
     {
       "id": "xray-routing-data",
-      "status": "checksum-pinned",
-      "version": "packaged-with-xray-v26.3.27",
+      "status": "checksum-pinned-source-cache-not-distributed",
+      "version": "cached-with-xray-v26.3.27",
       "architecture": "platform-independent-data",
       "source": "Other/xray-core/fetch.ps1",
       "license": "See Xray/geodata upstream licenses",
@@ -47,16 +47,18 @@
         { "name": "geoip.dat", "sha256": "744c97b74c52bae2ac8664fef6ac481d7765cb8432a0df54f0368a88b9b4a354" },
         { "name": "geosite.dat", "sha256": "adf92de0cfc70e458b399f04c5f912bf42d115ed7e37281b30e2f1c68605e4e9" }
       ],
-      "updateProcedure": "Fetch only with the pinned Xray build inputs, regenerate the runtime manifest, and run domain-routing regression tests."
+      "distributionPolicy": "NetF currently routes selected applications, not user domain or IP rule lists. The owned modern runtime intentionally omits these databases; the verified source cache remains available for a future optional routing feature.",
+      "updateProcedure": "If optional domain or IP routing is introduced, fetch only with pinned Xray inputs, document licensing, regenerate the runtime manifest, and run domain-routing and isolated-runtime regression tests."
     },
     {
       "id": "aiodns-configuration",
-      "status": "configuration-only-helper-incomplete",
+      "status": "source-only-not-distributed-helper-unavailable",
       "version": "inherited-compatibility-data",
       "architecture": "platform-independent-data",
-      "source": "Storage/bin/aiodns.conf",
+      "source": "Storage/aiodns.conf",
       "license": "GPL-3.0-only repository configuration; helper binary not currently distributed",
       "sha256": "d161dbd19b3dc9e20904e5f48d5f6757e9c28d33cb9aeb031495c678c0467e95",
+      "distributionPolicy": "The owned modern runtime omits this inactive configuration because no aiodns helper is distributed.",
       "updateProcedure": "Keep Split DNS visibly unavailable until a reproducible, licensed aiodns helper is packaged and tested."
     },
     {

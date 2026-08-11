@@ -91,15 +91,12 @@ Copy-Item -LiteralPath (Join-Path $repositoryRoot 'Storage\i18n') -Destination $
 
 $runtimeAssets = @(
     @{ Source = 'Storage\nfdriver.sys'; Destination = 'bin\nfdriver.sys' },
-    @{ Source = 'Storage\aiodns.conf'; Destination = 'bin\aiodns.conf' },
     @{ Source = 'Storage\tun2socks.bin'; Destination = 'bin\tun2socks.bin' },
     @{ Source = 'Storage\stun.txt'; Destination = 'bin\stun.txt' },
     @{ Source = 'Redirector\bin\Release\Redirector.bin'; Destination = 'bin\Redirector.bin' },
     @{ Source = 'Redirector\bin\Release\nfapi.dll'; Destination = 'bin\nfapi.dll' },
     @{ Source = 'RouteHelper\bin\Release\RouteHelper.bin'; Destination = 'bin\RouteHelper.bin' },
     @{ Source = 'Other\release\xray.exe'; Destination = 'bin\xray.exe' },
-    @{ Source = 'Other\xray-core\src\expanded\geoip.dat'; Destination = 'bin\geoip.dat' },
-    @{ Source = 'Other\xray-core\src\expanded\geosite.dat'; Destination = 'bin\geosite.dat' },
     @{ Source = 'Other\xray-core\src\expanded\wintun.dll'; Destination = 'bin\wintun.dll' },
     @{ Source = 'Other\release\pcap2socks.exe'; Destination = 'bin\pcap2socks.exe' },
     @{ Source = 'Other\release\xray-LICENSE.txt'; Destination = 'licenses\xray-LICENSE.txt' },

@@ -4,13 +4,24 @@ use super::runtime::OwnedRuntime;
 use super::settings::{DesktopSettings, DesktopStartupStatus, SettingsError, SettingsStore};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fs;
+use std::os::windows::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 const DESKTOP_LOG_LIMIT: usize = 500;
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum OwnedFolder {
+    Modes,
+    AppData,
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +124,9 @@ pub struct DesktopController {
     logs: Mutex<VecDeque<String>>,
     initializing: AtomicBool,
     shutting_down: AtomicBool,
+    health_probe_count: AtomicU64,
+    health_probe_total_ms: AtomicU64,
+    health_probe_max_ms: AtomicU64,
 }
 
 impl DesktopController {
@@ -145,6 +159,9 @@ impl DesktopController {
             logs: Mutex::new(VecDeque::new()),
             initializing: AtomicBool::new(false),
             shutting_down: AtomicBool::new(false),
+            health_probe_count: AtomicU64::new(0),
+            health_probe_total_ms: AtomicU64::new(0),
+            health_probe_max_ms: AtomicU64::new(0),
         })
     }
 
@@ -171,6 +188,7 @@ impl DesktopController {
             started,
             false,
         );
+        let settings_started = Instant::now();
         let desktop_settings = match self.settings.load() {
             Ok(settings) => settings,
             Err(error) => {
@@ -178,6 +196,10 @@ impl DesktopController {
                 DesktopSettings::default()
             }
         };
+        self.log(format!(
+            "Startup timing: settings-load={} ms",
+            settings_started.elapsed().as_millis()
+        ));
 
         self.transition_startup(
             &app,
@@ -186,6 +208,7 @@ impl DesktopController {
             started,
             false,
         );
+        let runtime_started = Instant::now();
         let runtime = match OwnedRuntime::prepare(&app) {
             Ok(runtime) => runtime,
             Err(error) => {
@@ -194,9 +217,9 @@ impl DesktopController {
             }
         };
         self.log(format!(
-            "Owned runtime {} prepared in {} ms",
-            runtime.version,
-            started.elapsed().as_millis()
+            "Startup timing: runtime-verification-install={} ms; version={}",
+            runtime_started.elapsed().as_millis(),
+            runtime.version
         ));
 
         self.transition_startup(
@@ -213,6 +236,10 @@ impl DesktopController {
                 return;
             }
         };
+        self.log(format!(
+            "Startup timing: engine-spawn={} ms handshake={} ms snapshot={} ms",
+            attachment.spawn_ms, attachment.handshake_ms, attachment.snapshot_ms
+        ));
 
         if desktop_settings.run_at_windows_login {
             match current_executable().and_then(|path| {
@@ -234,7 +261,7 @@ impl DesktopController {
         self.publish_engine_status(&app, attachment.snapshot.status);
         self.transition_startup(&app, StartupPhase::Ready, "NetF is ready", started, false);
         self.log(format!(
-            "Desktop initialization completed in {} ms using {} {}",
+            "Startup timing: total={} ms; backend={} {}",
             started.elapsed().as_millis(),
             attachment.info.display_name,
             attachment.info.version
@@ -312,6 +339,32 @@ impl DesktopController {
         })
     }
 
+    pub fn open_owned_folder(&self, folder: OwnedFolder) -> Result<(), DesktopError> {
+        let runtime_root = {
+            let state = self.state.lock().map_err(|_| {
+                DesktopError::new(
+                    "desktop_state_failed",
+                    "Desktop state lock was poisoned",
+                    true,
+                )
+            })?;
+            state.runtime.as_ref().map(|runtime| runtime.root.clone())
+        }
+        .ok_or_else(|| self.not_ready_error())?;
+        let target = resolve_owned_folder(&runtime_root, folder)?;
+        Command::new("explorer.exe")
+            .arg(&target)
+            .spawn()
+            .map_err(|error| {
+                DesktopError::new(
+                    "open_folder_failed",
+                    format!("Could not open the NetF folder: {error}"),
+                    true,
+                )
+            })?;
+        Ok(())
+    }
+
     pub fn ready_backend(&self) -> Result<&dyn EngineBackend, DesktopError> {
         if self.startup().phase != StartupPhase::Ready {
             return Err(self.not_ready_error());
@@ -351,6 +404,7 @@ impl DesktopController {
             message,
             updated_at_ms: now_ms(),
         };
+        let mut previous_phase = None;
         let changed = if let Ok(mut state) = self.state.lock() {
             if state.engine.phase == snapshot.phase
                 && state.engine.active == snapshot.active
@@ -358,6 +412,7 @@ impl DesktopController {
             {
                 false
             } else {
+                previous_phase = Some(state.engine.phase);
                 state.engine = snapshot.clone();
                 true
             }
@@ -365,6 +420,11 @@ impl DesktopController {
             false
         };
         if changed {
+            if let Some(previous) = previous_phase {
+                self.log(format!(
+                    "Engine state transition: {previous:?} -> {phase:?}"
+                ));
+            }
             let _ = app.emit("engine-status-changed", &snapshot);
             crate::tray::update(app, &snapshot);
         }
@@ -389,6 +449,10 @@ impl DesktopController {
             }
             Err(error) => {
                 let error = DesktopError::from(error);
+                self.log(format!(
+                    "Engine cleanup failed during disconnect: {}",
+                    error.code
+                ));
                 self.transition_engine(app, EnginePhase::Failed, true, error.message.clone());
                 Err(error)
             }
@@ -420,13 +484,30 @@ impl DesktopController {
         {
             return;
         }
+        let started = Instant::now();
         match self.backend.try_status() {
             Ok(Some(status)) => self.publish_engine_status(app, status),
             Ok(None) => {}
             Err(error) => {
                 let error = DesktopError::from(error);
+                self.log(format!("Engine health probe failed: {}", error.code));
                 self.transition_engine(app, EnginePhase::Failed, true, error.message);
             }
+        }
+        let elapsed: u64 = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+        let count = self.health_probe_count.fetch_add(1, Ordering::Relaxed) + 1;
+        let total = self
+            .health_probe_total_ms
+            .fetch_add(elapsed, Ordering::Relaxed)
+            + elapsed;
+        self.health_probe_max_ms
+            .fetch_max(elapsed, Ordering::Relaxed);
+        if count.is_multiple_of(20) {
+            self.log(format!(
+                "Health probe timing: count={count} total={total} ms average={} ms max={} ms",
+                total / count,
+                self.health_probe_max_ms.load(Ordering::Relaxed)
+            ));
         }
     }
 
@@ -435,7 +516,14 @@ impl DesktopController {
         if self.startup().phase == StartupPhase::Ready && state.phase != EnginePhase::Stopped {
             self.disconnect(app)?;
         }
-        self.backend.shutdown().map_err(DesktopError::from)?;
+        if let Err(error) = self.backend.shutdown() {
+            let error = DesktopError::from(error);
+            self.log(format!(
+                "Engine cleanup failed during shutdown: {}",
+                error.code
+            ));
+            return Err(error);
+        }
         self.shutting_down.store(true, Ordering::Release);
         self.transition_engine(app, EnginePhase::Stopped, false, "Stopped");
         Ok(())
@@ -554,13 +642,118 @@ fn current_executable() -> Result<PathBuf, DesktopError> {
     })
 }
 
+fn resolve_owned_folder(
+    runtime_root: &std::path::Path,
+    folder: OwnedFolder,
+) -> Result<PathBuf, DesktopError> {
+    let app_data_candidate = runtime_root.parent().ok_or_else(|| {
+        DesktopError::new(
+            "open_folder_failed",
+            "The NetF app-data folder was unavailable.",
+            false,
+        )
+    })?;
+    let target_candidate = match folder {
+        OwnedFolder::Modes => runtime_root.join("mode").join("Custom"),
+        OwnedFolder::AppData => app_data_candidate.to_path_buf(),
+    };
+    let boundary_candidate = match folder {
+        OwnedFolder::Modes => runtime_root,
+        OwnedFolder::AppData => app_data_candidate,
+    };
+    reject_reparse_chain(&target_candidate, boundary_candidate)?;
+
+    let runtime = fs::canonicalize(runtime_root).map_err(|error| {
+        DesktopError::new(
+            "open_folder_failed",
+            format!("Could not verify the NetF runtime folder: {error}"),
+            true,
+        )
+    })?;
+    let target = fs::canonicalize(&target_candidate).map_err(|error| {
+        DesktopError::new(
+            "open_folder_failed",
+            format!("Could not verify the NetF folder: {error}"),
+            true,
+        )
+    })?;
+
+    let app_data = runtime.parent().ok_or_else(|| {
+        DesktopError::new(
+            "open_folder_failed",
+            "The NetF app-data folder was unavailable.",
+            false,
+        )
+    })?;
+    if target != app_data && !target.starts_with(&runtime) {
+        return Err(DesktopError::new(
+            "open_folder_denied",
+            "The requested folder is outside NetF-owned app data.",
+            false,
+        ));
+    }
+    Ok(target)
+}
+
+fn reject_reparse_chain(
+    target: &std::path::Path,
+    boundary: &std::path::Path,
+) -> Result<(), DesktopError> {
+    let mut current = target;
+    loop {
+        let metadata = fs::symlink_metadata(current).map_err(|error| {
+            DesktopError::new(
+                "open_folder_failed",
+                format!("Could not inspect the NetF folder: {error}"),
+                true,
+            )
+        })?;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(DesktopError::new(
+                "open_folder_denied",
+                "The NetF folder contains a filesystem reparse point.",
+                false,
+            ));
+        }
+        if current == boundary {
+            break;
+        }
+        current = current.parent().ok_or_else(|| {
+            DesktopError::new(
+                "open_folder_denied",
+                "The NetF folder escaped its owned directory.",
+                false,
+            )
+        })?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn maps_unknown_engine_states_without_claiming_the_tunnel_is_stopped() {
         assert_eq!(engine_phase("connected"), EnginePhase::Connected);
         assert_eq!(engine_phase("unexpected"), EnginePhase::Unknown);
+    }
+
+    #[test]
+    fn fixed_folder_resolver_exposes_only_modes_and_app_data() {
+        let directory = tempdir().expect("temporary directory");
+        let runtime = directory.path().join("runtime");
+        fs::create_dir_all(runtime.join("mode/Custom")).expect("mode directory");
+
+        assert_eq!(
+            resolve_owned_folder(&runtime, OwnedFolder::Modes).unwrap(),
+            fs::canonicalize(runtime.join("mode/Custom")).unwrap()
+        );
+        assert_eq!(
+            resolve_owned_folder(&runtime, OwnedFolder::AppData).unwrap(),
+            fs::canonicalize(directory.path()).unwrap()
+        );
+        assert!(serde_json::from_str::<OwnedFolder>(r#""arbitrary""#).is_err());
     }
 }

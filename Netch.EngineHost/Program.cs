@@ -129,7 +129,7 @@ internal static class Program
                     supports = new[]
                     {
                         "snapshot", "status", "connect", "disconnect", "importLegacy",
-                        "modeDetail", "saveMode", "mergeMode", "logs", "settings",
+                        "modeDetail", "saveMode", "mergeMode", "deleteMode", "logs", "settings",
                         "updateSettings", "desktopStartupStatus", "configureDesktopStartup",
                         "shutdown"
                     }
@@ -142,6 +142,7 @@ internal static class Program
                 "modeDetail" => EngineResponse.Success(request.Id, GetModeDetail(request)),
                 "saveMode" => await SaveModeAsync(request, state),
                 "mergeMode" => await MergeModeAsync(request, state),
+                "deleteMode" => await DeleteModeAsync(request, state),
                 "logs" => EngineResponse.Success(request.Id, GetLogs(request)),
                 "settings" => EngineResponse.Success(request.Id, EngineSettingsService.Get()),
                 "updateSettings" => await UpdateSettingsAsync(request, state),
@@ -319,6 +320,23 @@ internal static class Program
             result.AddedHandleRules,
             result.AddedBypassRules,
             result.CreatedCopy,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> DeleteModeAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "deleting a mode");
+        var parameters = request.Parameters.Deserialize<ModeIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Mode parameters are required.");
+        var result = await ModeDeletionService.DeleteAsync(parameters.ModeId);
+        state.Transition(ConnectionState.Stopped, "Mode deleted");
+        return EngineResponse.Success(request.Id, new
+        {
+            result.DeletedSource,
+            result.DeletedRemark,
+            result.Origin,
+            result.BackupDirectory,
             snapshot = BuildSnapshot(state)
         });
     }

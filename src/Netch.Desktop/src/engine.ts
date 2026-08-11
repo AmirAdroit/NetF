@@ -45,6 +45,14 @@ export interface ModeMergeResult extends ModeSaveResult {
   addedBypassRules: number;
 }
 
+export interface ModeDeleteResult {
+  deletedSource: string;
+  deletedRemark: string;
+  origin: ModeSummary["origin"];
+  backupDirectory: string;
+  snapshot: EngineSnapshot;
+}
+
 export interface EngineSnapshot {
   apiVersion: number;
   status: EngineStatus;
@@ -146,4 +154,8 @@ export function canStopEngine(
     snapshot &&
       (connectionMayBeActive || snapshot.status.state !== "stopped"),
   );
+}
+
+export function canMutateModes(snapshot: EngineSnapshot): boolean {
+  return snapshot.status.state === "stopped" || snapshot.status.state === "failed";
 }

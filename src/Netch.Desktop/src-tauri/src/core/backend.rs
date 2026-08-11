@@ -1,7 +1,7 @@
 use super::engine::{
     EngineAttachment, EngineError, EngineLogResult, EngineSettings, EngineSnapshot, EngineStatus,
-    EngineSupervisor, LegacyImportResult, ModeDetail, ModeEditRequest, ModeMergeResult,
-    ModeSaveResult,
+    EngineSupervisor, LegacyImportResult, ModeDeleteResult, ModeDetail, ModeEditRequest,
+    ModeMergeResult, ModeSaveResult,
 };
 use super::settings::DesktopStartupStatus;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ pub trait EngineBackend: Send + Sync {
         source_mode_id: usize,
         target_mode_id: usize,
     ) -> Result<ModeMergeResult, EngineError>;
+    fn delete_mode(&self, mode_id: usize) -> Result<ModeDeleteResult, EngineError>;
     fn logs(&self, limit: usize) -> Result<EngineLogResult, EngineError>;
     fn settings(&self) -> Result<EngineSettings, EngineError>;
     fn update_settings(&self, settings: EngineSettings) -> Result<EngineSettings, EngineError>;
@@ -117,6 +118,10 @@ impl EngineBackend for NetchCompatibilityBackend {
         target_mode_id: usize,
     ) -> Result<ModeMergeResult, EngineError> {
         self.supervisor.merge_modes(source_mode_id, target_mode_id)
+    }
+
+    fn delete_mode(&self, mode_id: usize) -> Result<ModeDeleteResult, EngineError> {
+        self.supervisor.delete_mode(mode_id)
     }
 
     fn logs(&self, limit: usize) -> Result<EngineLogResult, EngineError> {

@@ -83,6 +83,15 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
     }
   }
 
+  async function openAppDataFolder() {
+    try {
+      setError("");
+      await invoke("open_owned_folder", { folder: "appData" });
+    } catch (openError) {
+      setError(errorMessage(openError));
+    }
+  }
+
   if (!settings) {
     return <section className="panel settings-loading"><SettingsIcon /><h2>{busy ? "Loading settings…" : "Settings unavailable"}</h2>{error && <div className="error-banner">{error}</div>}</section>;
   }
@@ -112,6 +121,7 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
               ? startupStatus.matchesCurrentExecutable ? "Scheduled Task verified" : "Scheduled Task needs repair"
               : "Disabled"}
           </div>
+          <button className="secondary-action settings-folder-action" onClick={openAppDataFolder} type="button">Open app data folder</button>
         </section>
 
         <section className="panel settings-section">
