@@ -1,0 +1,120 @@
+name: Modern desktop
+
+on:
+  push:
+    paths:
+      - "src/Netch.Desktop/**"
+      - "Netch/**"
+      - "Netch.EngineHost/**"
+      - "Tests/**"
+      - "Other/xray-core/**"
+      - "Redirector/**"
+      - "RouteHelper/**"
+      - "Storage/**"
+      - "third_party/proxy-cores.json"
+      - "third_party/runtime-components.json"
+      - "common.props"
+      - "global.json"
+      - ".github/workflows/modern-desktop.yml"
+  pull_request:
+    paths:
+      - "src/Netch.Desktop/**"
+      - "Netch/**"
+      - "Netch.EngineHost/**"
+      - "Tests/**"
+      - "Other/xray-core/**"
+      - "Redirector/**"
+      - "RouteHelper/**"
+      - "Storage/**"
+      - "third_party/proxy-cores.json"
+      - "third_party/runtime-components.json"
+      - "common.props"
+      - "global.json"
+      - ".github/workflows/modern-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: TypeScript and Rust checks
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src/Netch.Desktop
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Netch.Desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run check
+
+      - name: Test frontend
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Set up .NET 10 engine build
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.302
+
+      - name: Prepare headless engine host
+        run: npm run prepare:engine
+
+      - name: Assemble owned runtime
+        run: npm run prepare:runtime
+
+      - name: Select stable Rust toolchain
+        run: rustup default stable
+
+      - name: Check Rust formatting
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo fmt --check
+
+      - name: Lint Rust
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Test Rust
+        working-directory: src/Netch.Desktop/src-tauri
+        run: cargo test --locked
+
+  engine:
+    name: .NET compatibility and Xray traffic
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.302
+
+      - name: Fetch checksum-pinned Xray
+        id: xray
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'xray-v26.3.27'
+          $path = .\Other\xray-core\fetch.ps1 -OutputDirectory $output
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      - name: Test compatibility engine
+        shell: pwsh
+        env:
+          NETCH_XRAY_PATH: ${{ steps.xray.outputs.path }}
+        run: dotnet test .\Tests\Tests.csproj -c Release --logger "console;verbosity=normal"

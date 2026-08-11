@@ -46,13 +46,20 @@ public static class Configuration
             if (await LoadCoreAsync(FileFullName))
                 return;
 
-            Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
-            await LoadCoreAsync(BackupFileFullName);
+            if (File.Exists(BackupFileFullName))
+            {
+                Log.Information("Load backup configuration \"{FileName}\"", BackupFileFullName);
+                if (await LoadCoreAsync(BackupFileFullName))
+                    return;
+            }
+
+            throw new InvalidDataException(
+                $"Neither {FileFullName} nor its backup contains a valid configuration.");
         }
         catch (Exception e)
         {
             Log.Error(e, "Load configuration failed");
-            Environment.Exit(-1);
+            throw;
         }
     }
 
@@ -60,14 +67,7 @@ public static class Configuration
     {
         try
         {
-            Setting settings;
-
-            await using (var fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))
-            {
-                settings = (await JsonSerializer.DeserializeAsync<Setting>(fs, JsonSerializerOptions))!;
-            }
-
-            CheckSetting(settings);
+            var settings = await ReadValidatedAsync(filename);
             Global.Settings = settings;
             return true;
         }
@@ -76,6 +76,48 @@ public static class Configuration
             Log.Error(e, "Load configuration file \"{FileName}\" error ", filename);
             return false;
         }
+    }
+
+    public static async Task<Setting> ReadValidatedAsync(string filename)
+    {
+        await using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+        var settings = await JsonSerializer.DeserializeAsync<Setting>(fs, JsonSerializerOptions)
+            ?? throw new InvalidDataException("Configuration was empty.");
+        CheckSetting(settings);
+        return settings;
+    }
+
+    public static async Task ImportAsync(string filename)
+    {
+        var settings = await ReadValidatedAsync(filename);
+        await using var _ = await _lock.WriteLockAsync();
+        await AtomicJsonFile.WriteAsync(
+            FileFullName,
+            BackupFileFullName,
+            settings,
+            JsonSerializerOptions,
+            CheckSetting);
+        Global.Settings = settings;
+    }
+
+    public static async Task UpdateAsync(Action<Setting> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        await using var _ = await _lock.WriteLockAsync();
+
+        var serialized = JsonSerializer.SerializeToUtf8Bytes(Global.Settings, JsonSerializerOptions);
+        var candidate = JsonSerializer.Deserialize<Setting>(serialized, JsonSerializerOptions)
+            ?? throw new InvalidDataException("Configuration clone was empty.");
+        update(candidate);
+        CheckSetting(candidate);
+
+        await AtomicJsonFile.WriteAsync(
+            FileFullName,
+            BackupFileFullName,
+            candidate,
+            JsonSerializerOptions,
+            CheckSetting);
+        Global.Settings = candidate;
     }
 
     private static void CheckSetting(Setting settings)
@@ -103,18 +145,12 @@ public static class Configuration
             await using var _ = await _lock.WriteLockAsync();
             Log.Verbose("Save Configuration");
 
-            if (!Directory.Exists(DataDirectoryFullName))
-                Directory.CreateDirectory(DataDirectoryFullName);
-
-            var tempFile = Path.Combine(DataDirectoryFullName, FileFullName + ".tmp");
-            await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
-            {
-                await JsonSerializer.SerializeAsync(fileStream, Global.Settings, JsonSerializerOptions);
-            }
-
-            await EnsureConfigFileExistsAsync();
-
-            File.Replace(tempFile, FileFullName, BackupFileFullName);
+            await AtomicJsonFile.WriteAsync(
+                FileFullName,
+                BackupFileFullName,
+                Global.Settings,
+                JsonSerializerOptions,
+                CheckSetting);
         }
         catch (Exception e)
         {
@@ -122,11 +158,4 @@ public static class Configuration
         }
     }
 
-    private static async ValueTask EnsureConfigFileExistsAsync()
-    {
-        if (!File.Exists(FileFullName))
-        {
-            await using var fs = new FileStream(FileFullName, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, true);
-        }
-    }
 }

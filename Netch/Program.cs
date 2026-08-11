@@ -104,7 +104,9 @@ public static class Program
         Application.SetHighDpiMode(HighDpiMode.DpiUnawareGdiScaled);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(Global.MainForm);
+        var mainForm = Global.MainForm;
+        EngineEvents.Observer = new MainFormEngineObserver(mainForm);
+        Application.Run(mainForm);
     }
 
 #pragma warning restore VSTHRD002
@@ -173,9 +175,9 @@ public static class Program
 #endif
     }
 
-    public static void CreateLogger()
+    public static void CreateLogger(bool writeConsole = true)
     {
-        Log.Logger = new LoggerConfiguration()
+        var configuration = new LoggerConfiguration()
 #if DEBUG
             .MinimumLevel.Verbose()
 #else
@@ -184,10 +186,13 @@ public static class Program
             .WriteTo.Async(c => c.File(Path.Combine(Global.NetchDir, Constants.LogFile),
                 outputTemplate: Constants.OutputTemplate,
                 rollOnFileSizeLimit: false))
-            .WriteTo.Console(outputTemplate: Constants.OutputTemplate)
             .MinimumLevel.Override(@"Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .CreateLogger();
+            .Enrich.FromLogContext();
+
+        if (writeConsole)
+            configuration.WriteTo.Console(outputTemplate: Constants.OutputTemplate);
+
+        Log.Logger = configuration.CreateLogger();
     }
 
     private static void Application_OnException(object sender, ThreadExceptionEventArgs e)

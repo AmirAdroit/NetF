@@ -12,14 +12,19 @@ namespace Netch.Controllers;
 
 public class PcapController : Guard, IModeController
 {
-    private readonly LogForm _form;
+    private readonly LogForm? _form;
+    private readonly bool _showLogWindow;
     private ShareMode _mode = null!;
     private Socks5Server _server = null!;
 
-    public PcapController() : base("pcap2socks.exe", encoding: Encoding.UTF8)
+    public PcapController(bool showLogWindow = true) : base("pcap2socks.exe", encoding: Encoding.UTF8)
     {
-        _form = new LogForm(Global.MainForm);
-        _form.CreateControl();
+        _showLogWindow = showLogWindow;
+        if (_showLogWindow)
+        {
+            _form = new LogForm(Global.MainForm);
+            _form.CreateControl();
+        }
     }
 
     protected override IEnumerable<string> StartedKeywords { get; } = new[] { "└" };
@@ -57,17 +62,21 @@ public class PcapController : Guard, IModeController
 
     public override async Task StopAsync()
     {
-        Global.MainForm.Invoke(() => { _form.Close(); });
+        if (_form != null)
+            Global.MainForm.Invoke(_form.Close);
         await StopGuardAsync();
     }
 
     ~PcapController()
     {
-        _form.Dispose();
+        _form?.Dispose();
     }
 
     protected override void OnReadNewLine(string line)
     {
+        if (_form == null)
+            return;
+
         Global.MainForm.BeginInvoke(() =>
         {
             if (!_form.IsDisposed)
@@ -77,23 +86,28 @@ public class PcapController : Guard, IModeController
 
     protected override void OnStarted()
     {
-        Global.MainForm.BeginInvoke(() => _form.Show());
+        if (_form != null)
+            Global.MainForm.BeginInvoke(_form.Show);
     }
 
     protected override void OnStartFailed()
     {
         if (new FileInfo(LogPath).Length == 0)
         {
-            Task.Run(() =>
-                {
-                    Thread.Sleep(1000);
-                    Utils.Utils.Open("https://github.com/zhxie/pcap2socks#dependencies");
-                })
-                .Forget();
+            if (_showLogWindow)
+                Task.Run(() =>
+                    {
+                        Thread.Sleep(1000);
+                        Utils.Utils.Open("https://github.com/zhxie/pcap2socks#dependencies");
+                    })
+                    .Forget();
 
             throw new MessageException("Pleases install pcap2socks's dependency");
         }
 
-        Utils.Utils.Open(LogPath);
+        if (_showLogWindow)
+            Utils.Utils.Open(LogPath);
+        else
+            throw new MessageException($"pcap2socks failed. Review {LogPath} for details.");
     }
 }

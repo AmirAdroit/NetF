@@ -42,7 +42,7 @@ public class OutboundConfiguration
 
     public string version { get; set; }
 
-    public string address { get; set; }
+    public object address { get; set; }
 
     public string user { get; set; }
 
@@ -66,9 +66,22 @@ public class OutboundConfiguration
 
     public string privateKey { get; set; }
 
+    public string secretKey { get; set; }
+
     public string preSharedKey { get; set; }
 
     public int mtu { get; set; }
+
+    public WireGuardPeer[] peers { get; set; }
+}
+
+public class WireGuardPeer
+{
+    public string endpoint { get; set; }
+
+    public string publicKey { get; set; }
+
+    public string preSharedKey { get; set; }
 }
 
 public class VnextItem

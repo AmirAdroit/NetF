@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NetF",
+  "mainBinaryName": "NetF",
+  "version": "0.1.0",
+  "identifier": "org.netchfork.preview",
+  "build": {
+    "beforeDevCommand": "npm run prepare:desktop && npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run prepare:desktop && npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NetF — Starting",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 920,
+        "minHeight": 660,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost; style-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "externalBin": ["binaries/netch-engine-host"],
+    "resources": ["runtime-template/**/*"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "copyright": "Copyright (c) 2019 AmazingDM and Contributors; fork contributors",
+    "shortDescription": "NetF — Split tunneling for Windows",
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
+  }
+}

@@ -13,7 +13,7 @@ using Netch.Controllers;
 [assembly: AssemblyCopyright(UpdateChecker.Copyright)]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
-[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows10.0.17763.0")]
 [assembly: Fody.ConfigureAwait(false)]
 
 // 将 ComVisible 设置为 false 会使此程序集中的类型

@@ -5,6 +5,7 @@ using Netch.Models;
 using Netch.Models.Modes;
 using Netch.Models.Modes.ProcessMode;
 using Netch.Servers;
+using Netch.Services;
 using Netch.Utils;
 using static Netch.Interops.Redirector;
 
@@ -196,7 +197,7 @@ public class NFController : IModeController
     private static void InstallDriver()
     {
         Log.Information("Install netfilter2 driver");
-        Global.MainForm.StatusText(i18N.Translate("Installing netfilter2 driver"));
+        EngineEvents.ReportStatus(i18N.Translate("Installing netfilter2 driver"));
 
         if (!File.Exists(Constants.NFDriver))
             throw new MessageException(i18N.Translate("builtin driver files missing, can't install NF driver"));

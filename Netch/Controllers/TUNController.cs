@@ -7,6 +7,7 @@ using Netch.Models;
 using Netch.Models.Modes;
 using Netch.Models.Modes.TunMode;
 using Netch.Servers;
+using Netch.Services;
 using Netch.Utils;
 using static Netch.Interops.tun2socks;
 
@@ -15,6 +16,7 @@ namespace Netch.Controllers
     public class TUNController : IModeController
     {
         private readonly DNSController _aioDnsController = new();
+        private bool _aioDnsStarted;
 
         private TunMode _mode = null!;
         private IPAddress? _serverRemoteAddress;
@@ -91,13 +93,20 @@ namespace Netch.Controllers
 
             #region DNS
 
-            if (_tunConfig.UseCustomDNS)
+            var aioDnsAvailable = File.Exists(Path.Combine(Global.NetchDir, "bin", "aiodns.bin"));
+            if (_tunConfig.UseCustomDNS || !aioDnsAvailable)
             {
                 Dial(NameList.TYPE_DNSADDR, DnsUtils.AppendPort(_tunConfig.DNS));
+                if (!aioDnsAvailable && !_tunConfig.UseCustomDNS)
+                {
+                    Log.Warning("aiodns.bin is unavailable; TUN is using the configured direct DNS server");
+                    EngineEvents.ReportStatus("Split DNS unavailable; using configured DNS");
+                }
             }
             else
             {
                 await _aioDnsController.StartAsync();
+                _aioDnsStarted = true;
                 Dial(NameList.TYPE_DNSADDR, $"127.0.0.1:{Global.Settings.AioDNS.ListenPort}");
             }
 
@@ -123,10 +132,11 @@ namespace Netch.Controllers
             {
                 FreeAsync(),
                 Task.Run(ClearRouteTable),
-                _aioDnsController.StopAsync()
+                _aioDnsStarted ? _aioDnsController.StopAsync() : Task.CompletedTask
             };
 
             await Task.WhenAll(tasks);
+            _aioDnsStarted = false;
         }
 
         private void CheckDriver()
@@ -157,7 +167,7 @@ namespace Netch.Controllers
 
         private void SetupRouteTable()
         {
-            Global.MainForm.StatusText(i18N.Translate("Setup Route Table Rule"));
+            EngineEvents.ReportStatus(i18N.Translate("Setup Route Table Rule"));
 
             var tunNetworkInterface = NetworkInterfaceUtils.Get(_tun.InterfaceIndex);
             // Server Address

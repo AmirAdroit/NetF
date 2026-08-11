@@ -21,13 +21,13 @@ public static class ModeHelper
         JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
     }
 
-    public static Mode LoadMode(string file)
+    public static Mode LoadMode(string file, string? modeRoot = null)
     {
         if (file.EndsWith(".json"))
             return LoadJsonMode(file);
 
         if (file.EndsWith(".txt"))
-            return ReadTxtMode(file);
+            return ReadTxtMode(file, modeRoot ?? ModeService.Instance.ModeDirectoryFullName);
 
         throw new NotSupportedException();
     }
@@ -46,7 +46,58 @@ public static class ModeHelper
         JsonSerializer.Serialize(fs, mode, JsonSerializerOptions);
     }
 
-    private static Mode ReadTxtMode(string file)
+    public static async Task WriteFileAtomicAsync(
+        this Mode mode,
+        string destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        mode.FullName = Path.GetFullPath(destination);
+        await AtomicJsonFile.WriteAsync<Mode>(
+            mode.FullName,
+            mode.FullName + ".bak",
+            mode,
+            JsonSerializerOptions,
+            ValidateEditableMode,
+            cancellationToken);
+    }
+
+    private static void ValidateEditableMode(Mode mode)
+    {
+        if (mode.Remark.Count == 0 || mode.Remark.Values.All(string.IsNullOrWhiteSpace))
+            throw new InvalidDataException("Mode remark is required.");
+
+        switch (mode)
+        {
+            case Redirector processMode:
+                ValidateRules(processMode.Handle, processMode.Bypass);
+                break;
+            case TunMode tunMode:
+                ValidateRules(tunMode.Handle, tunMode.Bypass);
+                break;
+            case ShareMode:
+                break;
+            default:
+                throw new InvalidDataException("Mode type is not supported.");
+        }
+    }
+
+    private static void ValidateRules(IReadOnlyCollection<string> handle, IReadOnlyCollection<string> bypass)
+    {
+        const int maximumRulesPerList = 10_000;
+        const int maximumRuleLength = 2_048;
+        if (handle.Count > maximumRulesPerList || bypass.Count > maximumRulesPerList)
+            throw new InvalidDataException($"A mode cannot contain more than {maximumRulesPerList} rules per list.");
+
+        foreach (var rule in handle.Concat(bypass))
+        {
+            if (string.IsNullOrWhiteSpace(rule) || rule.Length > maximumRuleLength
+                || rule.Any(character => character is '\r' or '\n' or '\0'))
+                throw new InvalidDataException("Mode rules must be non-empty single-line values no longer than 2048 characters.");
+        }
+    }
+
+    private static Mode ReadTxtMode(string file, string modeRoot)
     {
         Mode mode;
         var ls = File.ReadAllLines(file);
@@ -86,7 +137,11 @@ public static class ModeHelper
             if (l.StartsWith("#include"))
             {
                 var relativePath = l["#include ".Length..].Replace("<", "").Replace(">", "").Replace(".h", ".txt").Trim();
-                includeMode = ReadTxtMode(ModeService.Instance.GetFullPath(relativePath));
+                var includePath = Path.GetFullPath(Path.Combine(modeRoot, relativePath));
+                var resolvedModeRoot = Path.GetFullPath(modeRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (!includePath.StartsWith(resolvedModeRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Mode include escaped the mode directory.");
+                includeMode = ReadTxtMode(includePath, modeRoot);
             }
 
             switch (mode)
@@ -110,7 +165,7 @@ public static class ModeHelper
                     if (includeMode is TunMode tMode)
                     {
                         tunMode.Bypass.AddRange(tMode.Bypass);
-                        tMode.Handle.AddRange(tMode.Handle);
+                        tunMode.Handle.AddRange(tMode.Handle);
                         break;
                     }
 

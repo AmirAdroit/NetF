@@ -1,5 +1,13 @@
 /.vs
 /.idea
 /release
+/deliverables
 /packages
 /TestResults
+/src/Netch.Desktop/node_modules
+/src/Netch.Desktop/dist
+/src/Netch.Desktop/src-tauri/target
+/src/Netch.Desktop/.vite-dev*.log
+/src/Netch.Desktop/*.tsbuildinfo
+*.user
+*.suo

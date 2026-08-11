@@ -27,13 +27,32 @@ public static class Global
     /// </summary>
     public static readonly List<Mode> Modes = new();
 
-    public static readonly string NetchDir;
-    public static readonly string NetchExecutable;
+    public static string NetchDir { get; private set; }
+
+    public static string NetchExecutable { get; private set; }
 
     static Global()
     {
         NetchExecutable = Application.ExecutablePath;
         NetchDir = Application.StartupPath;
+    }
+
+    /// <summary>
+    /// Configures the runtime asset root for a trusted native host. This must be
+    /// called before configuration, modes, helpers, or controllers are loaded.
+    /// The webview never supplies this path.
+    /// </summary>
+    public static void ConfigureRuntimeRoot(string runtimeRoot, string executablePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+
+        var resolvedRoot = Path.GetFullPath(runtimeRoot);
+        if (!Directory.Exists(resolvedRoot))
+            throw new DirectoryNotFoundException($"Runtime root does not exist: {resolvedRoot}");
+
+        NetchDir = resolvedRoot;
+        NetchExecutable = Path.GetFullPath(executablePath);
     }
 
     /// <summary>

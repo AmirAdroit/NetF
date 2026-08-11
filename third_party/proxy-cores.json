@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "id": "xray",
+      "status": "validated-compatible-fallback",
+      "version": "v26.3.27",
+      "tagObject": "d2758a023cd7f4174a5a5fa4ff66e487d4342ba0",
+      "source": "https://github.com/XTLS/Xray-core",
+      "release": "https://github.com/XTLS/Xray-core/releases/tag/v26.3.27",
+      "license": "MPL-2.0",
+      "artifact": {
+        "name": "Xray-windows-64.zip",
+        "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip",
+        "sha256": "d004c39288ce9ada487c6f398c7c545f7d749e44bdfdd59dbc9f865afba4e1ad"
+      },
+      "intendedCompatibility": [
+        "SOCKS5",
+        "Shadowsocks",
+        "VMess",
+        "VLESS",
+        "Trojan",
+        "WireGuard"
+      ],
+      "intendedAdditions": [
+        "VLESS Vision",
+        "REALITY",
+        "XHTTP"
+      ],
+      "excludedCompatibility": [
+        "ShadowsocksR"
+      ]
+    },
+    {
+      "id": "sing-box",
+      "status": "license-review-required",
+      "version": "v1.13.15",
+      "tagObject": "3708fa18766cda1f11b77f6ed9c7bd61688f17df",
+      "source": "https://github.com/SagerNet/sing-box",
+      "release": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.15",
+      "license": "NOASSERTION",
+      "licenseFile": "https://github.com/SagerNet/sing-box/blob/v1.13.15/LICENSE",
+      "artifact": {
+        "name": "sing-box-1.13.15-windows-amd64.zip",
+        "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.15/sing-box-1.13.15-windows-amd64.zip",
+        "sha256": "599b296f6e57511d36d2a6f3011aed1a86fa98418578bbb06bd6dc241b5d8877"
+      },
+      "intendedAdditions": [
+        "Hysteria2",
+        "TUIC",
+        "AnyTLS"
+      ]
+    }
+  ]
+}

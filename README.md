@@ -1,41 +1,256 @@
-# `In preparation for 2.0, this repository will be cleared of all 1.0 related releases and code`
-<p align="center"><img src="https://github.com/NetchX/Netch/blob/main/Netch/Resources/Netch.png?raw=true" width="128" /></p>
+# NetF
 
-<div align="center">
+> **Status: functional Windows compatibility build under active development.**
+> NetF is a fork of
+> [Netch](https://github.com/netchx/netch), originally created by AmazingDM and
+> its contributors. It is not an official Netch release and is not yet a
+> replacement for a known-good Netch installation.
 
-# Netch
-A simple proxy client
+**NetF — Split tunneling for Windows** preserves Netch's lightweight Windows proxy client behavior, including process-aware routing, TUN
+routing, network sharing, multiple proxy protocols, and reusable mode files.
+This fork exists to preserve those useful behaviors while making the project
+maintainable, testable, secure, and pleasant to use on current Windows systems.
 
-[![](https://img.shields.io/badge/telegram-group-green?style=flat-square)](https://t.me/netch_group)
-[![](https://img.shields.io/badge/telegram-channel-blue?style=flat-square)](https://t.me/netch_channel)
-[![](https://img.shields.io/github/downloads/netchx/netch/total.svg?style=flat-square)](https://github.com/netchx/netch/releases)
-[![](https://img.shields.io/github/v/release/netchx/netch?style=flat-square)](https://github.com/netchx/netch/releases)
-</div>
+The modernization is incremental. The existing WinForms application and native
+networking components remain the compatibility baseline while a Tauri 2 desktop
+shell and a UI-independent engine boundary are developed alongside them.
 
-## Features
-Some features may not be implemented in version 1
+## What works today
 
-### Modes
-- `ProcessMode` - Use Netfilter driver to intercept process traffic
-- `ShareMode` - Share your network based on WinPcap / Npcap
-- `TunMode` - Use WinTUN driver to create virtual adapter
-- `WebMode` - Web proxy mode
+- The WinForms compatibility application now targets .NET 10 LTS; its C++
+  helpers and native behavior remain preserved.
+- Existing `Storage/mode` files remain the compatibility format.
+- A new Tauri desktop workspace lives in `src/Netch.Desktop`.
+- The first modern vertical slice scans a directory tree for Windows
+  executables and emits rules compatible with legacy process-mode files.
+- The new scanner has deterministic output, skips directory links/reparse
+  points, reports inaccessible paths, and enforces a configurable result limit.
+- The desktop follows the Windows theme by default and also supports persisted
+  light or dark appearance overrides.
+- Existing compatible SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard
+  profiles can use the pinned Xray `v26.3.27` provider. Known-incompatible
+  profiles automatically remain on the legacy SagerNet provider.
+- Generated Xray configurations are validated by the real core, and five TCP
+  protocol paths are exercised with local end-to-end proxy traffic tests.
+- Settings saves are flushed, re-read, validated, backed up, and atomically
+  replaced instead of modifying the only configuration in place.
+- A self-contained .NET 10 engine host exposes an allowlisted JSON API to the
+  Rust adapter. The modern Servers tab runs a versioned fork-owned runtime,
+  lists non-secret server/mode summaries, imports legacy data, and requests
+  connect/disconnect.
+- The compact Modes Library searches and sorts the complete library alphabetically, marks
+  built-in, imported, and user-owned modes, and edits Process/TUN rules.
+  Built-ins use copy-on-customize; imported and user modes are backed up and
+  atomically replaced. Compatible modes can be merged with deduplicated rules.
+  Every origin can be deleted after confirmation while stopped/failed; deletion
+  creates a flushed timestamped backup, and built-ins use a versioned tombstone
+  so runtime preparation does not silently restore them.
+- The Modes Scanner is a separate compact workspace, preserving bounded,
+  deterministic executable discovery without keeping scanner state in the root UI.
+- Overview reports engine/runtime readiness and mode ownership. Activity shows
+  a bounded, credential-redacted log tail that can be copied for diagnostics.
+- Settings exposes a validated operational subset of listener, redirector,
+  DNS, health-check, and Xray behavior with atomic persistence and rollback.
+- Runtime verification and the engine handshake run off the desktop event loop,
+  so the window remains responsive and reports the current startup stage.
+- Overview makes stopped, transitioning, connected, failed, and unknown states
+  explicit in text and color. The same state drives the sidebar, window title,
+  Activity view, and notification-area icon.
+- Closing the window hides NetF to the notification area. Explicit **Exit NetF**
+  performs cleanup, and a second launch focuses the existing instance.
+- Settings can register a verified per-user Windows Scheduled Task to start
+  NetF in the tray at sign-in. Auto-start never connects automatically.
 
-### Protocols
-- [`Socks5`](https://www.wikiwand.com/en/SOCKS)
-- [`Shadowsocks`](https://shadowsocks.org)
-- [`ShadowsocksR`](https://github.com/shadowsocksrr/shadowsocksr-libev)
-- [`WireGuard`](https://www.wireguard.com)
-- [`Trojan`](https://trojan-gfw.github.io/trojan)
-- [`VMess`](https://www.v2fly.org)
-- [`VLESS`](https://xtls.github.io)
+The modern desktop is currently a **functional compatibility build**, not yet
+a replacement for a known-good client. The engine bridge is connected, but
+privileged process/TUN/sharing behavior still requires hands-on Windows VM and
+recovery testing. Server/profile editing remains disabled; mode and the exposed
+settings writes are enabled with validation, backup, and atomic replacement.
 
-### Others
-- UDP NAT FullCone (Limited by your server)
-- .NET 6.0 x64
+## Architecture
 
-## Sponsor
-<a href="https://www.jetbrains.com/?from=Netch"><img src="jetbrains.svg" alt="JetBrains" width="200"/></a>
+```text
+Modern desktop (Tauri 2 + React/TypeScript)
+        |
+        | typed Tauri commands and events
+        v
+Rust desktop controller + versioned EngineBackend API
+        |
+        | staged engine boundary
+        v
+Existing .NET orchestration + C++/driver helpers
+```
 
-## License
-Netch is licensed under the [GPLv3](https://raw.githubusercontent.com/netchx/netch/main/LICENSE) license
+The target is not a permanent stack of two application runtimes. The .NET
+engine boundary is a migration bridge: preserve behavior first, measure parity,
+then decide component-by-component whether a Rust port reduces risk and
+maintenance cost.
+
+See [architecture](docs/architecture.md), the
+[compatibility matrix](docs/compatibility.md), the
+[modernization roadmap](docs/modernization-roadmap.md), and
+[security notes](docs/security.md) before changing networking or privilege code.
+Operational failures are covered in [troubleshooting](docs/troubleshooting.md)
+and the [Windows smoke test](docs/windows-smoke-test.md). See the measured
+[performance review](docs/performance-review.md) and ranked
+[optimization backlog](docs/optimization-backlog.md) for this milestone.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `Netch/` | .NET 10 WinForms compatibility application and engine code |
+| `Netch.EngineHost/` | Headless, versioned JSON-line engine bridge |
+| `Redirector/` | Native process-traffic redirector |
+| `RouteHelper/` | Native Windows route helper |
+| `Other/` | Third-party/core component build scripts |
+| `Storage/` | Runtime assets, translations, and mode definitions |
+| `Tests/` | Existing legacy tests (currently minimal) |
+| `src/Netch.Desktop/` | New Tauri 2 desktop UI and Rust adapter |
+| `docs/` | Architecture, migration, security, and operational context |
+
+## Prerequisites
+
+### Modern desktop
+
+- Windows 10 or later
+- Microsoft C++ Build Tools with **Desktop development with C++**
+- Microsoft Edge WebView2 Runtime
+- Rust stable toolchain
+- Node.js 22 LTS or newer
+
+```powershell
+cd src\Netch.Desktop
+npm install
+npm run tauri:dev
+```
+
+`tauri:dev` builds the self-contained engine host, compiles the first-party
+Redirector and RouteHelper, assembles a checksum-manifested runtime template,
+and launches the desktop with administrator rights and no console window. On startup, the app verifies
+and installs those assets into its private local application-data directory.
+
+The Servers tab can import `data/settings.json` and `mode/Custom` from a legacy
+Netch directory. Import validates the data, creates a rollback backup, and uses
+atomic configuration replacement. It never copies or executes the selected
+directory's `bin`, DLL, driver, or helper files. A SOCKS server is used directly;
+compatible VMess/VLESS/Trojan-family profiles use the packaged, checksum-pinned
+`xray.exe`. Unsupported legacy provider shapes remain visibly unavailable until
+an owned, audited compatibility provider is packaged.
+
+Run frontend checks without opening a desktop window:
+
+```powershell
+cd src\Netch.Desktop
+npm run check
+npm run test
+```
+
+Run Rust tests:
+
+```powershell
+cd src\Netch.Desktop\src-tauri
+cargo test
+```
+
+The elevated all-features GUI test binary may require an elevated runner. The
+library suite, including real EngineHost IPC, can be run explicitly with
+`cargo test --lib --all-features`.
+
+Build the complete debug executable without an installer:
+
+```powershell
+cd src\Netch.Desktop
+npm run tauri:build -- --debug --no-bundle
+```
+
+The output is `src\Netch.Desktop\src-tauri\target\debug\NetF.exe`.
+See [Windows smoke testing](docs/windows-smoke-test.md) before connecting a
+real profile.
+
+### Legacy application
+
+The compatibility build needs Visual Studio C++ build tools, .NET SDK
+10.0.302 (pinned by `global.json`), Go, Rust, and the native build dependencies described by
+the existing scripts. `build.ps1` downloads and compiles runtime components;
+review it before running it in a trusted environment.
+
+```powershell
+.\build.ps1 -Configuration Release -OutputPath release
+```
+
+Run the .NET compatibility, provider-config, and loopback traffic tests with a
+checksum-verified Xray binary:
+
+```powershell
+$xray = .\Other\xray-core\fetch.ps1
+$env:NETCH_XRAY_PATH = $xray
+dotnet test .\Tests\Tests.csproj -c Release
+```
+
+The release build packages Xray under its own filename and includes its MPL-2.0
+license. It does not overwrite `v2ray-sn.exe`, so unsupported legacy profile
+shapes retain their existing fallback.
+
+Packaged native/helper provenance, hashes, licenses, and update procedures are
+tracked in `third_party/runtime-components.json`. Components marked
+`distribution-audit-required` are suitable only for compatibility development;
+they block a public release until replaced or fully traced and licensed.
+
+## Configuration compatibility
+
+Legacy settings are stored under `data/settings.json`; mode definitions live
+under `mode/` in a release and under `Storage/mode/` in this repository. Do not
+point development builds at the only copy of a real configuration.
+Configuration saves create `settings.json.bak`, flush and re-read a temporary
+file in the same directory, validate it, and atomically replace the destination.
+Imported modes are kept under `mode/Custom/Imported`; modes created or cloned by
+the modern app live under `mode/Custom/User`. Re-import preserves the user-owned
+directory. Mode updates follow the same backup, temporary-file validation, and
+atomic replacement policy.
+
+The modern runtime intentionally omits Xray `geoip.dat` and `geosite.dat`
+because NetF currently selects applications, not user domain/IP rule lists.
+It also omits inactive `aiodns.conf` because no aiodns helper is distributed.
+Pinned source/cache artifacts remain available for a future optional feature.
+
+The frontend can request only two native folder actions: `modes` and `appData`.
+Rust resolves and validates both; React cannot provide a path.
+
+The new scanner emits the same kind of C++ regex fragments as the old scanner:
+it uses executable filenames such as `game\.exe`, not absolute paths. The mode
+editor accepts one rule per line for Process and TUN modes. Share-mode arguments
+remain read-only because exposing arbitrary helper arguments to the webview
+would violate the command boundary.
+
+Desktop-only settings are stored separately as `desktop-settings.json` under
+the existing local application-data identity, preserving current owned runtime
+data during the visible rename. The auto-start toggle changes only the fixed
+**NetF Startup** Scheduled Task; the webview cannot supply an executable path,
+task name, or arguments.
+
+## Security and distribution
+
+Netch performs administrator-level networking changes and loads native code and
+a kernel driver. Treat release engineering as security-sensitive:
+
+- do not download unsigned mutable binaries at runtime;
+- pin source versions and verify hashes during builds;
+- keep the webview capability allowlist narrow;
+- never expose arbitrary shell execution to frontend code;
+- redact proxy credentials from logs and diagnostics;
+- sign release executables, helpers, and drivers where applicable.
+
+See [docs/security.md](docs/security.md) for the current threat model and known
+gaps.
+
+## Attribution and license
+
+This fork remains licensed under **GNU GPL v3**. Preserve `LICENSE`,
+`Netch/NOTICE.txt`, copyright notices, and source availability when distributing
+modified binaries. New code in this repository is distributed under the same
+GPL-3.0 license unless a file explicitly states otherwise.
+
+NetF has distinct branding and does not represent itself as an official Netch
+release. The UI, documentation, license, and NOTICE retain prominent credit to
+AmazingDM and the upstream Netch contributors.
