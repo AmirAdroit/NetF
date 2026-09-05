@@ -7,8 +7,9 @@ would interrupt important work.
 
 ## Safe host-level review
 
-1. Close every running Netch process.
-2. Keep a known-good Netch installation available as an import source. The
+1. Close every running NetF process.
+2. Keep the previous NetF data or another known-good configuration directory
+   available as an import source. The
    desktop must read only its `data/settings.json` and `mode/Custom` content;
    its `bin` directory must not be copied or executed.
 3. Build the desktop:
@@ -22,19 +23,25 @@ would interrupt important work.
    accept the administrator prompt.
    Confirm no CMD window appears and the NetF window remains movable while it
    reports Settings, Runtime, and Engine startup phases.
-5. Open **Servers**, verify **Owned runtime**, select **Import**, choose the old
-   Netch directory, and verify that server/custom-mode counts match. The webview
-   must show no hostname, password, UUID, key, or subscription URL.
-6. Confirm **Missing helpers** is zero. If not, stop; the selected runtime is
-   incomplete and connection results are not meaningful.
-7. Confirm **Core source** says **Fork package** and the proxy-core list includes
-   the packaged Xray. `direct SOCKS` is built into the compatibility engine and
-   does not require a proxy-core process.
+5. Open **Servers** and test both **Connect** and **Library**. If **Import previous
+   NetF data** appears, use it once and verify server/custom-mode counts match.
+   Also test the generic folder import. Endpoints may be shown, but the webview
+   must never receive a saved password, UUID, private/pre-shared key, or subscription URL.
+   Paste one valid VLESS, VMess, Trojan, Shadowsocks, and SOCKS5 link separately;
+   confirm each creates and selects one server, clears the paste box, and never
+   returns the saved secret when the server is reopened.
+6. Open Overview **Runtime readiness**. Required Process, TUN, and Xray components
+   must be Ready before connection testing. An absent optional sharing helper may
+   report Limited without presenting intentionally excluded AioDNS/legacy providers
+   as broken capabilities.
+7. Confirm the verified runtime contains packaged Xray and no unowned fallback
+   cores. Direct SOCKS is built into the NetF engine and does not require a core process.
 8. Switch between Servers and Modes, change light/dark/system appearance, and
    resize to the minimum supported window. Check for clipped controls,
    horizontal scrolling, or selections that reset unexpectedly.
 9. In **Modes**, verify names are alphabetical, search by name/path/type/origin,
-   and confirm the Built-in, Imported, and User badges match their locations.
+   click All/Built-in/Imported/User filters, and confirm origin counts. Changing
+   filters must not discard the selected editor or unsaved rule text.
 10. Save a built-in Process mode and verify a user-owned JSON copy is created
     while the built-in text template remains unchanged. Edit it again and verify
     the prior JSON is retained as `.bak`.
@@ -42,12 +49,20 @@ would interrupt important work.
     are deduplicated and an incompatible Process/TUN merge is rejected.
 12. In **Settings**, change a harmless stopped-state option, save, restart, and
     verify the value persists and `data/settings.json.bak` contains the prior
-    file. Restore the original value before connection testing.
+    file. Save/restart-test Handle child processes, TUN address/netmask/gateway,
+    custom/proxied TUN DNS, TCP/ICMP test method, and disabled/enabled live
+    interval. Invalid masks, subnets, DNS combinations, and intervals must fail
+    without changing the file. Restore the original values before connections.
 13. In **Activity**, refresh and copy logs. Confirm the output is bounded and
     contains no server password, UUID, token, private key, or proxy URI.
 14. Enable **Start NetF when Windows starts**, confirm the Scheduled Task is
     verified, sign out/in, and verify NetF starts in the notification area
-    without opening its window or connecting. Disable it and verify removal.
+    without opening its window or connecting. Move a portable build, confirm the
+    stale task offers **Repair for this installation** and **Remove**, repair it,
+    then disable it and verify removal of only the fixed `NetF Startup` task.
+15. In Servers, run **Test selected** and **Test all** with TCP and ICMP. Record
+    success, closed-port timeout, reserved-name DNS failure, and WireGuard/UDP
+    guidance. Confirm results expose no credentials and Connect stays available.
 
 ## Connection parity
 
@@ -64,9 +79,13 @@ Use a profile already proven in the legacy client. Test one mode at a time:
    dependencies are present.
 5. Compare `logging/` output with the legacy run and inspect it for credential
    leakage before sharing diagnostics.
-6. Connect again, close the window, and verify routing continues with a green
-   notification-area icon. Restore NetF, choose **Exit NetF**, and verify the
-   engine and helper processes stop before the application exits.
+6. With **Hide to tray**, connect, close the window, and verify routing continues
+   with a green icon. With **Disconnect and exit**, repeat while stopped and
+   connected; verify helpers stop and networking returns to baseline. Inject a
+   cleanup failure in a VM and verify the window reopens instead of exiting.
+7. Enable live latency at a short interval, connect, verify only the connected
+   server updates, then disconnect during a probe. The probe must cancel and all
+   route/DNS/adapter/helper cleanup must still complete.
 
 ## VM-only failure recovery
 
@@ -92,7 +111,7 @@ and redacted logs with the test record.
    Exit normally, time the next warm launch, and record the settings, runtime,
    engine-spawn, handshake, snapshot, and total timing lines from Activity.
 2. Confirm the runtime contains no `geoip.dat`, `geosite.dat`, or `aiodns.conf`.
-   Confirm there is one `netch-engine-host.exe` process and no visible console
+   Confirm there is one `netf-engine-host.exe` process and no visible console
    window. Run `scripts\measure-performance.ps1 -SampleSeconds 600` while stopped;
    record working/private memory, process count, average idle CPU, and the
    aggregate three-second health-probe timing after at least ten minutes.
@@ -117,25 +136,41 @@ and redacted logs with the test record.
    inaccessible directories, directory reparse points, an empty directory, and
    result limits 1 and 5000. Verify deterministic sorting/rules, warnings, checkbox
    selection, and copied CRLF rule text. No executable may start or change.
-8. With the geo files absent, connect each supported Xray profile. Include at
+8. In **Servers → Library**, create, edit, restart, duplicate, and confirmed-delete
+   SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard entries. Exercise
+   Keep saved/Replace/Clear where allowed, invalid hostnames/ports/UUIDs/ciphers/
+   transport-header pairs/CIDRs/keys, deletion cancellation, timestamped backups,
+   rename profile references, and connected-state rejection. Verify unsupported
+   imported profiles are read-only except confirmed deletion and cannot connect.
+   Import the same valid share link twice and verify a unique display name. Test
+   one line at 8,192 characters, an over-limit line, multiple lines, duplicate
+   query keys, malformed Base64/JSON/percent encoding, Reality/XTLS, unsupported
+   transports, Shadowsocks plugin options, an unsupported scheme, bracketed IPv6,
+   and an attempted import while connected. Every failure must be credential-free,
+   must add no server, and must clear the paste box. Verify WireGuard is offered
+   only through the manual form.
+9. With the geo files absent, connect each supported Xray profile. Include at
    least one hostname-based server endpoint and verify Windows DNS resolution,
    server-route reachability/bypass, and normal traffic. Verify unsupported
-   profiles remain on the compatibility provider rather than failing open.
-9. Run Process routing with a selected application and unrelated LAN/browser
+   profiles fail closed and no fallback executable starts.
+10. Run Process routing with a selected application and unrelated LAN/browser
    traffic. Verify TCP, UDP where supported, DNS, LAN access, and bypass behavior.
    Disconnect and compare routes, DNS servers, firewall state, services, helpers,
    and outbound behavior byte-for-byte or command-for-command with baseline.
-10. Run the equivalent TUN test, including Wintun adapter creation/removal,
+11. Run the equivalent TUN test, including Wintun adapter creation/removal,
     default/specific server route, IPv4/IPv6, LAN bypass, DNS setup, and complete
     restoration after disconnect, connect failure, and unavailable helper.
-11. While connected, hide/restore through the tray, start a second instance,
+12. While connected, hide/restore through the tray, start a second instance,
     choose normal Exit, kill Xray, kill EngineHost, then force-kill the desktop in
     separate VM snapshots. Verify focus behavior, explicit failed/unknown state,
     no orphan helpers, cleanup evidence, and no unsafe automatic reconnection.
-12. Test offline startup, IPv6-only/disabled combinations, Wi-Fi plus Ethernet,
+13. Test offline startup, IPv6-only/disabled combinations, Wi-Fi plus Ethernet,
     VPN/multiple NICs, Windows sign-in auto-start, reboot after a forced failure,
     helper/driver absence, uninstall, and reinstall. Auto-start must never connect.
-13. Search copied Activity output and engine logs for passwords, proxy URIs,
+14. Verify a clean install uses `%LOCALAPPDATA%\io.github.amiradroit.netf`, leaves
+    `%LOCALAPPDATA%\org.netchfork.preview` untouched, imports only validated settings
+    and custom modes after opt-in, and never imports binaries, logs, caches, or geo data.
+15. Search copied Activity output and engine logs for passwords, proxy URIs,
     UUIDs, tokens, private/pre-shared keys, authorization headers, and server
     secrets. Any credential or incomplete route/DNS/firewall cleanup is a release
     blocker and requires restoring the VM snapshot before further connection tests.

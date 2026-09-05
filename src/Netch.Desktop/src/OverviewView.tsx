@@ -1,4 +1,4 @@
-import { ActivityIcon, LayersIcon, ServerIcon, SettingsIcon } from "./icons";
+import { ActivityIcon, LayersIcon, ServerIcon } from "./icons";
 import type { EngineSnapshot } from "./engine";
 import { enginePresentation, type EngineRuntimeState } from "./desktop";
 
@@ -17,7 +17,14 @@ export function OverviewView({ snapshot, engineState, runtimeVersion, onNavigate
     (counts, mode) => ({ ...counts, [mode.origin]: counts[mode.origin] + 1 }),
     { "built-in": 0, imported: 0, user: 0 },
   ) ?? { "built-in": 0, imported: 0, user: 0 };
-  const unavailable = snapshot?.capabilities.filter((capability) => !capability.available) ?? [];
+  const unavailableRequired = snapshot?.capabilities.filter((capability) => capability.required && !capability.available) ?? [];
+  const unavailableOptional = snapshot?.capabilities.filter((capability) => !capability.required && !capability.available) ?? [];
+  const requiredMissingCount = new Set(unavailableRequired.flatMap((capability) => capability.missing)).size;
+  const readiness = requiredMissingCount > 0 ? `${requiredMissingCount} missing` : unavailableOptional.length > 0 ? "Limited" : "Ready";
+
+  function showReadiness() {
+    document.getElementById("runtime-readiness")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   return (
     <div className="overview-view">
@@ -37,11 +44,11 @@ export function OverviewView({ snapshot, engineState, runtimeVersion, onNavigate
         <button className="overview-stat" onClick={() => onNavigate("Servers")} type="button"><ServerIcon /><strong>{snapshot?.servers.length ?? 0}</strong><span>Servers</span></button>
         <button className="overview-stat" onClick={() => onNavigate("Modes")} type="button"><LayersIcon /><strong>{snapshot?.modes.length ?? 0}</strong><span>Modes</span></button>
         <button className={`overview-stat state-${state.tone}`} onClick={() => onNavigate("Activity")} type="button"><ActivityIcon /><strong>{state.shortLabel}</strong><span>Engine state</span></button>
-        <button className="overview-stat" onClick={() => onNavigate("Settings")} type="button"><SettingsIcon /><strong>{unavailable.length}</strong><span>Unavailable capabilities</span></button>
+        <button className="overview-stat" onClick={showReadiness} type="button"><ActivityIcon /><strong>{readiness}</strong><span>Runtime readiness</span></button>
       </section>
 
       <div className="workspace-grid overview-grid">
-        <section className="panel">
+        <section className="panel" id="runtime-readiness" tabIndex={-1}>
           <div className="panel-heading"><div><span className="step-label">Mode ownership</span><h2>Library composition</h2></div></div>
           <dl className="health-list">
             <div><dt>Built-in templates</dt><dd>{origins["built-in"]}</dd></div>
@@ -54,7 +61,7 @@ export function OverviewView({ snapshot, engineState, runtimeVersion, onNavigate
           <div className="panel-heading"><div><span className="step-label">Runtime capabilities</span><h2>Operational readiness</h2></div></div>
           <div className="capability-list">
             {snapshot?.capabilities.map((capability) => (
-              <div key={capability.name}><span className={capability.available ? "status-ok" : "status-warn"} /> <strong>{capability.name}</strong><small>{capability.available ? "Available" : `Missing: ${capability.missing.join(", ")}`}</small></div>
+              <div key={capability.name}><span className={capability.available ? "status-ok" : capability.required ? "status-bad" : "status-warn"} /> <strong>{capability.name}</strong><small>{capability.available ? "Ready" : `${capability.required ? "Required" : "Optional"} · Missing: ${capability.missing.join(", ")}`}</small></div>
             ))}
           </div>
         </section>

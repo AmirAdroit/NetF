@@ -23,15 +23,17 @@ if (-not $?) {
     exit $LASTEXITCODE
 }
 
-$publishedHost = Join-Path $publishDirectory 'Netch.EngineHost.exe'
+$publishedHost = Join-Path $publishDirectory 'netf-engine-host.exe'
 if (-not (Test-Path -LiteralPath $publishedHost -PathType Leaf)) {
     throw "Engine host publish did not produce $publishedHost"
 }
 
 Copy-Item -LiteralPath $publishedHost `
-    -Destination (Join-Path $binaryDirectory 'netch-engine-host-x86_64-pc-windows-msvc.exe') -Force
+    -Destination (Join-Path $binaryDirectory 'netf-engine-host-x86_64-pc-windows-msvc.exe') -Force
 
-$obsoleteDevelopmentHost = Join-Path $binaryDirectory 'netch-engine-host.exe'
-if (Test-Path -LiteralPath $obsoleteDevelopmentHost -PathType Leaf) {
-    Remove-Item -LiteralPath $obsoleteDevelopmentHost -Force
+foreach ($obsoleteName in @('netch-engine-host.exe', 'netch-engine-host-x86_64-pc-windows-msvc.exe')) {
+    $obsoleteHost = Join-Path $binaryDirectory $obsoleteName
+    if (Test-Path -LiteralPath $obsoleteHost -PathType Leaf) {
+        Remove-Item -LiteralPath $obsoleteHost -Force
+    }
 }

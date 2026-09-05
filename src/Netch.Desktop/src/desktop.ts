@@ -53,6 +53,7 @@ export interface RuntimeInfo {
 export interface DesktopSettings {
   schemaVersion: number;
   runAtWindowsLogin: boolean;
+  closeBehavior: "hideToTray" | "exit";
 }
 
 export interface DesktopStartupStatus {

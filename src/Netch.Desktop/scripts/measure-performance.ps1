@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $desktopRoot = Split-Path $PSScriptRoot -Parent
-$processNames = @('NetF', 'netch-engine-host', 'Netch.EngineHost', 'xray', 'tun2socks', 'pcap2socks')
+$processNames = @('NetF', 'netf-engine-host', 'xray', 'tun2socks', 'pcap2socks')
 
 function Get-NetFProcesses {
     Get-Process -ErrorAction SilentlyContinue |

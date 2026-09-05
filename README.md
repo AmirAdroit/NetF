@@ -1,10 +1,10 @@
 # NetF
 
-> **Status: functional Windows compatibility build under active development.**
+> **Status: NetF 0.2.0 Windows release candidate under active validation.**
 > NetF is a fork of
 > [Netch](https://github.com/netchx/netch), originally created by AmazingDM and
-> its contributors. It is not an official Netch release and is not yet a
-> replacement for a known-good Netch installation.
+> its contributors. It is an independent application and is not an official
+> Netch release.
 
 **NetF — Split tunneling for Windows** preserves Netch's lightweight Windows proxy client behavior, including process-aware routing, TUN
 routing, network sharing, multiple proxy protocols, and reusable mode files.
@@ -27,17 +27,24 @@ shell and a UI-independent engine boundary are developed alongside them.
   points, reports inaccessible paths, and enforces a configurable result limit.
 - The desktop follows the Windows theme by default and also supports persisted
   light or dark appearance overrides.
-- Existing compatible SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard
-  profiles can use the pinned Xray `v26.3.27` provider. Known-incompatible
-  profiles automatically remain on the legacy SagerNet provider.
+- Compatible SOCKS5, Shadowsocks, VMess, VLESS, Trojan, and WireGuard profiles
+  use the pinned Xray `v26.3.27` provider. Unsupported imported profiles fail
+  closed with an explanation; NetF does not silently invoke an unowned fallback.
 - Generated Xray configurations are validated by the real core, and five TCP
   protocol paths are exercised with local end-to-end proxy traffic tests.
 - Settings saves are flushed, re-read, validated, backed up, and atomically
   replaced instead of modifying the only configuration in place.
-- A self-contained .NET 10 engine host exposes an allowlisted JSON API to the
-  Rust adapter. The modern Servers tab runs a versioned fork-owned runtime,
-  lists non-secret server/mode summaries, imports legacy data, and requests
-  connect/disconnect.
+- A self-contained .NET 10 `netf-engine-host.exe` exposes an allowlisted JSON API
+  to the Rust adapter. The compact Servers **Connect / Library** workspaces can
+  create, edit, duplicate, confirm-delete, search, and connect supported profiles.
+  Saved passwords, UUIDs, and private/pre-shared keys never return to React;
+  edits use explicit **Keep saved / Replace / Clear** actions.
+- Servers **Library** can paste one standard VLESS, VMess, Trojan, Shadowsocks,
+  or SOCKS5 share link. Parsing is local and offline, the link is bounded to
+  8,192 characters and cleared after every attempt, and unsupported transports,
+  plugins, TLS modes, duplicate parameters, or provider options fail closed.
+- The connection mode picker is an accessible searchable combobox with visible
+  results, keyboard selection, clear/Escape behavior, and fail-closed selection.
 - The compact Modes Library searches and sorts the complete library alphabetically, marks
   built-in, imported, and user-owned modes, and edits Process/TUN rules.
   Built-ins use copy-on-customize; imported and user modes are backed up and
@@ -50,22 +57,28 @@ shell and a UI-independent engine boundary are developed alongside them.
 - Overview reports engine/runtime readiness and mode ownership. Activity shows
   a bounded, credential-redacted log tail that can be copied for diagnostics.
 - Settings exposes a validated operational subset of listener, redirector,
-  DNS, health-check, and Xray behavior with atomic persistence and rollback.
+  Process child handling, TUN adapter/DNS, endpoint testing, and Xray behavior
+  with atomic persistence and rollback.
+- Servers can test one endpoint or the complete library with three bounded TCP
+  or ICMP probes. Results distinguish success, timeout, DNS failure, and other
+  errors without returning credentials. An optional 1–3600 second monitor tests
+  only the connected server and is cancelled before disconnect or shutdown.
 - Runtime verification and the engine handshake run off the desktop event loop,
   so the window remains responsive and reports the current startup stage.
 - Overview makes stopped, transitioning, connected, failed, and unknown states
   explicit in text and color. The same state drives the sidebar, window title,
   Activity view, and notification-area icon.
-- Closing the window hides NetF to the notification area. Explicit **Exit NetF**
-  performs cleanup, and a second launch focuses the existing instance.
+- Closing the window hides NetF to the notification area by default. Settings
+  can instead make window close use the same disconnect/cleanup path as explicit
+  **Exit NetF**; cleanup failure keeps and restores the application. A second
+  launch focuses the existing instance.
 - Settings can register a verified per-user Windows Scheduled Task to start
   NetF in the tray at sign-in. Auto-start never connects automatically.
 
-The modern desktop is currently a **functional compatibility build**, not yet
-a replacement for a known-good client. The engine bridge is connected, but
-privileged process/TUN/sharing behavior still requires hands-on Windows VM and
-recovery testing. Server/profile editing remains disabled; mode and the exposed
-settings writes are enabled with validation, backup, and atomic replacement.
+The modern desktop is functional, but privileged process/TUN/sharing behavior
+still requires the documented hands-on Windows VM and recovery matrix before
+0.2.0 publication. Manual server management, modes, settings, tray lifecycle,
+and auto-start are enabled behind stopped-state and typed validation boundaries.
 
 ## Architecture
 
@@ -130,13 +143,25 @@ Redirector and RouteHelper, assembles a checksum-manifested runtime template,
 and launches the desktop with administrator rights and no console window. On startup, the app verifies
 and installs those assets into its private local application-data directory.
 
-The Servers tab can import `data/settings.json` and `mode/Custom` from a legacy
-Netch directory. Import validates the data, creates a rollback backup, and uses
-atomic configuration replacement. It never copies or executes the selected
-directory's `bin`, DLL, driver, or helper files. A SOCKS server is used directly;
+The Servers tab can import `data/settings.json` and `mode/Custom` from a selected
+configuration directory. A one-click opt-in action also detects the previous
+NetF data under `%LOCALAPPDATA%\org.netchfork.preview` while the standalone app
+uses `%LOCALAPPDATA%\io.github.amiradroit.netf`. Import validates the data,
+creates a rollback backup, and uses atomic configuration replacement. It never
+copies or executes source binaries, DLLs, drivers, caches, logs, or geo assets.
+A SOCKS server is used directly;
 compatible VMess/VLESS/Trojan-family profiles use the packaged, checksum-pinned
 `xray.exe`. Unsupported legacy provider shapes remain visibly unavailable until
 an owned, audited compatibility provider is packaged.
+
+For a single server, open **Servers → Library**, paste a share link, and choose
+**Import link**. Supported forms are standard `vless://`, Base64-JSON or
+authority-style `vmess://`, `trojan://`, SIP002 `ss://`, and `socks5://` or
+`socks://` URIs. This is deliberately not a subscription client: it accepts one
+URI, performs no network request, does not execute plugin options, and does not
+infer a non-standard WireGuard link. Add WireGuard through the typed manual form.
+The link contains credentials while it is in the paste box, so do not include it
+in screenshots or issue reports.
 
 Run frontend checks without opening a desktop window:
 
@@ -167,6 +192,19 @@ npm run tauri:build -- --debug --no-bundle
 The output is `src\Netch.Desktop\src-tauri\target\debug\NetF.exe`.
 See [Windows smoke testing](docs/windows-smoke-test.md) before connecting a
 real profile.
+
+Build the release installer and portable archive:
+
+```powershell
+cd src\Netch.Desktop
+npm run tauri:build
+npm run package:portable
+```
+
+The installer is written under `src-tauri\target\release\bundle\nsis`; the
+portable archive is written to the repository `deliverables` directory. The
+portable package includes `NetF.exe`, `netf-engine-host.exe`, the verified
+`runtime-template`, README, GPL license, and upstream notice.
 
 ### Legacy application
 
@@ -224,14 +262,24 @@ remain read-only because exposing arbitrary helper arguments to the webview
 would violate the command boundary.
 
 Desktop-only settings are stored separately as `desktop-settings.json` under
-the existing local application-data identity, preserving current owned runtime
-data during the visible rename. The auto-start toggle changes only the fixed
+`%LOCALAPPDATA%\io.github.amiradroit.netf`. The old application-data directory
+is never modified during startup or import and remains a rollback source. The
+schema-v2 desktop file stores Windows auto-start and `hideToTray`/`exit` close
+behavior; schema-v1 files migrate atomically with safe hide-to-tray behavior.
+The engine settings retain their existing `data/settings.json` shape. NetF now
+round-trips child-process routing, TUN IPv4/netmask/gateway/custom-DNS fields,
+TCP-versus-ICMP endpoint checks, and the compatible `StartedPingInterval`
+value (`-1`/legacy `0` disabled, `1..3600` enabled). Endpoint latency measures
+DNS plus TCP/ICMP reachability, not proxy authentication or tunneled traffic.
+The
+auto-start toggle changes only the fixed
 **NetF Startup** Scheduled Task; the webview cannot supply an executable path,
-task name, or arguments.
+task name, or arguments. Verification normalizes quoted/device paths and checks
+the current Windows SID; stale registrations expose explicit repair/remove actions.
 
 ## Security and distribution
 
-Netch performs administrator-level networking changes and loads native code and
+NetF performs administrator-level networking changes and loads inherited native code and
 a kernel driver. Treat release engineering as security-sensitive:
 
 - do not download unsigned mutable binaries at runtime;
@@ -252,5 +300,5 @@ modified binaries. New code in this repository is distributed under the same
 GPL-3.0 license unless a file explicitly states otherwise.
 
 NetF has distinct branding and does not represent itself as an official Netch
-release. The UI, documentation, license, and NOTICE retain prominent credit to
-AmazingDM and the upstream Netch contributors.
+release. Required credit to AmazingDM and upstream contributors remains in the
+collapsed **About & legal** view, documentation, license, notices, and source history.

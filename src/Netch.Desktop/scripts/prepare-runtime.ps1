@@ -126,7 +126,7 @@ $manifestFiles = Get-ChildItem -LiteralPath $templateRoot -Recurse -File |
 
 $manifest = [ordered]@{
     schemaVersion = 1
-    runtimeVersion = '0.1.0'
+    runtimeVersion = '0.2.0'
     files = @($manifestFiles | Sort-Object path)
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 4

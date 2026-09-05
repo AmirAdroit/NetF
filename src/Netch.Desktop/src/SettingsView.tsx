@@ -83,6 +83,28 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
     }
   }
 
+  async function setCloseBehavior(closeBehavior: DesktopSettings["closeBehavior"]) {
+    if (!desktopSettings || busy) return;
+    const previous = desktopSettings;
+    const next = { ...desktopSettings, closeBehavior };
+    setDesktopSettings(next);
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await invoke<DesktopSettings>("update_desktop_settings", { settings: next });
+      setDesktopSettings(saved);
+      setMessage(closeBehavior === "exit"
+        ? "Closing the window will now disconnect safely, restore networking, and exit."
+        : "Closing the window will now keep NetF running in the notification area.");
+    } catch (saveError) {
+      setDesktopSettings(previous);
+      setError(errorMessage(saveError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openAppDataFolder() {
     try {
       setError("");
@@ -115,12 +137,24 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
             />
             <span><strong>Start NetF when Windows starts</strong><small>Uses a verified per-user Scheduled Task with highest privileges. Starts quietly in the tray and never connects automatically.</small></span>
           </label>
+          <fieldset className="close-behavior" disabled={busy || !desktopSettings}>
+            <legend>When the window is closed</legend>
+            <label><input type="radio" name="close-behavior" checked={desktopSettings?.closeBehavior === "hideToTray"} onChange={() => void setCloseBehavior("hideToTray")} /><span><strong>Hide to tray</strong><small>Keep NetF and any active tunnel running.</small></span></label>
+            <label><input type="radio" name="close-behavior" checked={desktopSettings?.closeBehavior === "exit"} onChange={() => void setCloseBehavior("exit")} /><span><strong>Disconnect and exit</strong><small>Uses the same cleanup path as Exit in the tray menu. NetF stays open if cleanup fails.</small></span></label>
+          </fieldset>
           <div className={`startup-registration ${startupStatus?.enabled && startupStatus.matchesCurrentExecutable ? "verified" : "inactive"}`}>
             <span />
             {startupStatus?.enabled
               ? startupStatus.matchesCurrentExecutable ? "Scheduled Task verified" : "Scheduled Task needs repair"
               : "Disabled"}
           </div>
+          {startupStatus?.enabled && !startupStatus.matchesCurrentExecutable && (
+            <div className="startup-repair-actions">
+              <p>{startupStatus.message ?? "The existing task points to a different installation."}</p>
+              <button className="primary-action" disabled={busy} onClick={() => void setRunAtWindowsLogin(true)} type="button">Repair for this installation</button>
+              <button className="danger-action" disabled={busy} onClick={() => void setRunAtWindowsLogin(false)} type="button">Remove</button>
+            </div>
+          )}
           <button className="secondary-action settings-folder-action" onClick={openAppDataFolder} type="button">Open app data folder</button>
         </section>
 
@@ -133,6 +167,9 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
             <label>Request timeout (ms)<input type="number" min={1000} max={120000} step={500} value={settings.requestTimeout} onChange={(event) => update("requestTimeout", Number(event.target.value))} /></label>
           </div>
           <label className="toggle-row"><input type="checkbox" checked={settings.serverTcpPing} onChange={(event) => update("serverTcpPing", event.target.checked)} /><span><strong>Use TCP for server checks</strong><small>More representative than ICMP when providers filter ping.</small></span></label>
+          <div className="settings-fields latency-settings">
+            <label>Connected-server live test (seconds)<input type="number" min={-1} max={3600} value={settings.liveLatencyIntervalSeconds} onChange={(event) => update("liveLatencyIntervalSeconds", Number(event.target.value))} /><small>Use -1 or 0 to disable. Enabled range: 1–3600. Tests DNS and endpoint reachability, not proxy authentication.</small></label>
+          </div>
         </section>
 
         <section className="panel settings-section">
@@ -144,6 +181,7 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
               ["filterDns", "Filter DNS"],
               ["handleOnlyDns", "Handle only matched DNS"],
               ["dnsProxy", "Proxy DNS"],
+              ["filterParent", "Handle child processes"],
               ["filterIcmp", "Filter ICMP"],
             ] as const).map(([key, label]) => (
               <label className="toggle-row" key={key}><input type="checkbox" checked={settings[key]} onChange={(event) => update(key, event.target.checked)} /><span><strong>{label}</strong></span></label>
@@ -152,6 +190,22 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
           <div className="settings-fields">
             <label>DNS endpoint<input value={settings.dnsHost} onChange={(event) => update("dnsHost", event.target.value)} placeholder="1.1.1.1:53" /></label>
             <label>ICMP delay (ms)<input type="number" min={0} max={10000} value={settings.icmpDelay} onChange={(event) => update("icmpDelay", Number(event.target.value))} /></label>
+          </div>
+        </section>
+
+        <section className="panel settings-section tun-settings-section">
+          <div className="panel-heading compact"><div><span className="step-label">TUN routing</span><h2>Adapter and DNS</h2></div></div>
+          <div className="settings-fields settings-fields-three">
+            <label>Adapter IPv4 address<input value={settings.tunAddress} onChange={(event) => update("tunAddress", event.target.value)} placeholder="10.0.0.2" /></label>
+            <label>Netmask<input value={settings.tunNetmask} onChange={(event) => update("tunNetmask", event.target.value)} placeholder="255.255.255.0" /></label>
+            <label>Gateway<input value={settings.tunGateway} onChange={(event) => update("tunGateway", event.target.value)} placeholder="10.0.0.1" /></label>
+          </div>
+          <div className="toggle-grid tun-dns-grid">
+            <label className="toggle-row"><input type="checkbox" checked={settings.tunUseCustomDns} onChange={(event) => update("tunUseCustomDns", event.target.checked)} /><span><strong>Use custom TUN DNS</strong><small>Overrides the adapter DNS with the literal IPv4 address below.</small></span></label>
+            <label className="toggle-row"><input type="checkbox" checked={settings.tunProxyDns} disabled={!settings.tunUseCustomDns} onChange={(event) => update("tunProxyDns", event.target.checked)} /><span><strong>Proxy custom DNS</strong><small>Requires custom TUN DNS to be enabled.</small></span></label>
+          </div>
+          <div className="settings-fields">
+            <label>DNS server<input disabled={!settings.tunUseCustomDns} value={settings.tunDns} onChange={(event) => update("tunDns", event.target.value)} placeholder="1.1.1.1" /></label>
           </div>
         </section>
 
@@ -170,6 +224,10 @@ export function SettingsView({ snapshot, active }: SettingsViewProps) {
         <div>{error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success-banner" role="status">{message}</div>}</div>
         <button className="primary-action" disabled={busy || locked} onClick={save} type="button">{busy ? "Saving…" : "Save settings"}</button>
       </div>
+      <details className="panel legal-details">
+        <summary>About &amp; legal</summary>
+        <p>NetF is an independent GPL-3.0 split-tunneling application derived from Netch. It is not an official Netch release. Copyright and license notices for upstream authors and bundled components are included with the application and source repository.</p>
+      </details>
     </div>
   );
 }

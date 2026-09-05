@@ -3,6 +3,7 @@ mod core;
 mod tray;
 
 use crate::core::desktop::{DesktopController, spawn_health_monitor};
+use crate::core::settings::CloseBehavior;
 use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 
@@ -39,7 +40,16 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                let controller = window.state::<Arc<DesktopController>>();
+                match controller
+                    .desktop_settings()
+                    .map(|settings| settings.close_behavior)
+                {
+                    Ok(CloseBehavior::Exit) => tray::request_exit(window.app_handle()),
+                    _ => {
+                        let _ = window.hide();
+                    }
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -50,6 +60,15 @@ pub fn run() {
             commands::runtime_info,
             commands::open_owned_folder,
             commands::import_legacy_configuration,
+            commands::previous_netf_data_available,
+            commands::import_previous_netf_configuration,
+            commands::server_detail,
+            commands::save_server,
+            commands::import_server_link,
+            commands::duplicate_server,
+            commands::delete_server,
+            commands::test_server_latency,
+            commands::test_all_server_latencies,
             commands::engine_snapshot,
             commands::connect_profile,
             commands::disconnect_profile,

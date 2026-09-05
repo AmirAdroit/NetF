@@ -1,7 +1,7 @@
 [package]
 name = "netf-desktop"
-version = "0.1.0"
-description = "NetF desktop client, a modernized fork of Netch"
+version = "0.2.0"
+description = "NetF split-tunneling desktop client for Windows"
 authors = ["Netch contributors and fork contributors"]
 edition = "2024"
 license = "GPL-3.0-only"

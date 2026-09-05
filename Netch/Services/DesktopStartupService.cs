@@ -22,18 +22,17 @@ public static class DesktopStartupService
         if (task == null)
             return new DesktopStartupStatus(false, false, TaskName, null, "Not registered");
 
-        var action = task.Definition.Actions.OfType<ExecAction>().SingleOrDefault();
+        var actions = task.Definition.Actions.OfType<ExecAction>().ToArray();
+        var action = actions.Length == 1 ? actions[0] : null;
         var hasLogonTrigger = task.Definition.Triggers.OfType<LogonTrigger>().Any();
         var isHighest = task.Definition.Principal.RunLevel == TaskRunLevel.Highest;
-        var currentUser = WindowsIdentity.GetCurrent().Name;
+        using var identity = WindowsIdentity.GetCurrent();
+        var currentUser = identity.Name;
+        var currentSid = identity.User?.Value;
         var registeredUser = task.Definition.Principal.UserId;
-        var ownerMatches = string.IsNullOrWhiteSpace(registeredUser)
-                           || string.Equals(registeredUser, currentUser, StringComparison.OrdinalIgnoreCase);
+        var ownerMatches = PrincipalsMatch(registeredUser, currentUser, currentSid);
         var pathMatches = action != null
-                          && string.Equals(
-                              Path.GetFullPath(action.Path.Trim('"')),
-                              expectedPath,
-                              StringComparison.OrdinalIgnoreCase);
+                          && PathsMatch(action.Path, expectedPath);
         var argumentsMatch = action != null
                              && string.Equals(action.Arguments?.Trim(), StartupArgument, StringComparison.Ordinal);
         var matches = pathMatches && argumentsMatch && hasLogonTrigger && isHighest && ownerMatches;
@@ -92,5 +91,56 @@ public static class DesktopStartupService
         if (!File.Exists(fullPath) || !string.Equals(Path.GetExtension(fullPath), ".exe", StringComparison.OrdinalIgnoreCase))
             throw new FileNotFoundException("The NetF executable was not found.", fullPath);
         return fullPath;
+    }
+
+    public static bool PathsMatch(string registeredPath, string expectedPath)
+    {
+        try
+        {
+            return string.Equals(
+                NormalizeWindowsPath(registeredPath),
+                NormalizeWindowsPath(expectedPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    public static bool PrincipalsMatch(string? registeredUser, string currentName, string? currentSid)
+    {
+        if (string.IsNullOrWhiteSpace(registeredUser))
+            return false;
+        if (string.Equals(registeredUser, currentName, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(currentSid)
+                && string.Equals(registeredUser, currentSid, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        try
+        {
+            var account = new NTAccount(registeredUser);
+            var sid = (SecurityIdentifier)account.Translate(typeof(SecurityIdentifier));
+            return !string.IsNullOrWhiteSpace(currentSid)
+                   && string.Equals(sid.Value, currentSid, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (IdentityNotMappedException)
+        {
+            return false;
+        }
+        catch (SystemException)
+        {
+            return false;
+        }
+    }
+
+    private static string NormalizeWindowsPath(string path)
+    {
+        var normalized = path.Trim().Trim('"');
+        if (normalized.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            normalized = @"\\" + normalized[8..];
+        else if (normalized.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[4..];
+        return Path.GetFullPath(normalized).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 }

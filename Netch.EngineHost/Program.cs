@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Netch.Controllers;
 using Netch.Interfaces;
+using Netch.Models;
 using Netch.Services;
 using Serilog;
 
@@ -22,11 +23,11 @@ internal static class Program
     {
         Console.InputEncoding = System.Text.Encoding.UTF8;
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-
+        HostState? state = null;
         try
         {
             var options = ParseOptions(args);
-            var state = new HostState(options.RuntimeKind);
+            state = new HostState(options.RuntimeKind);
             await EngineRuntime.InitializeHeadlessAsync(
                 options.RuntimeRoot,
                 Environment.ProcessPath ?? AppContext.BaseDirectory,
@@ -41,6 +42,8 @@ internal static class Program
         }
         finally
         {
+            if (state != null)
+                await state.StopLiveLatencyAsync();
             await MainController.StopAsync();
             await Log.CloseAndFlushAsync();
         }
@@ -118,17 +121,19 @@ internal static class Program
                 "hello" => EngineResponse.Success(request.Id, new
                 {
                     apiVersion = 1,
-                    backendId = "netch-compat",
-                    displayName = "Netch compatibility engine",
+                    backendId = "netf-engine",
+                    displayName = "NetF engine",
                     backendVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "development",
                     components = new[]
                     {
-                        new { name = "Netch.EngineHost", version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "development" },
+                        new { name = "NetF Engine Host", version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "development" },
                         new { name = ".NET runtime", version = Environment.Version.ToString() }
                     },
                     supports = new[]
                     {
                         "snapshot", "status", "connect", "disconnect", "importLegacy",
+                        "serverDetail", "saveServer", "importServerLink", "duplicateServer", "deleteServer",
+                        "testServerLatency", "testAllServerLatencies",
                         "modeDetail", "saveMode", "mergeMode", "deleteMode", "logs", "settings",
                         "updateSettings", "desktopStartupStatus", "configureDesktopStartup",
                         "shutdown"
@@ -139,6 +144,13 @@ internal static class Program
                 "connect" => await ConnectAsync(request, state),
                 "disconnect" => await DisconnectAsync(request.Id, state),
                 "importLegacy" => await ImportLegacyAsync(request, state),
+                "serverDetail" => EngineResponse.Success(request.Id, GetServerDetail(request)),
+                "saveServer" => await SaveServerAsync(request, state),
+                "importServerLink" => await ImportServerLinkAsync(request, state),
+                "duplicateServer" => await DuplicateServerAsync(request, state),
+                "deleteServer" => await DeleteServerAsync(request, state),
+                "testServerLatency" => await TestServerLatencyAsync(request, state),
+                "testAllServerLatencies" => await TestAllServerLatenciesAsync(request, state),
                 "modeDetail" => EngineResponse.Success(request.Id, GetModeDetail(request)),
                 "saveMode" => await SaveModeAsync(request, state),
                 "mergeMode" => await MergeModeAsync(request, state),
@@ -150,7 +162,7 @@ internal static class Program
                     request.Id,
                     DesktopStartupService.Get(GetDesktopStartupParameters(request).ExecutablePath)),
                 "configureDesktopStartup" => ConfigureDesktopStartup(request),
-                "shutdown" => EngineResponse.Success(request.Id, state.Snapshot(), shutdown: true),
+                "shutdown" => await ShutdownAsync(request.Id, state),
                 _ => EngineResponse.Failure(request.Id, "unknown_method", "The requested engine method is not allowlisted.")
             };
         }
@@ -164,12 +176,21 @@ internal static class Program
 
     private static object BuildSnapshot(HostState state)
     {
-        var servers = Global.Settings.Server.Select((server, index) => new
+        var servers = Global.Settings.Server.Select((server, index) =>
         {
-            id = index,
-            type = server.Type,
-            server.Remark,
-            server.Group
+            var support = ServerManagementService.Support(server);
+            var latency = ServerLatencyService.GetLatest(server, index);
+            return new
+            {
+                id = index,
+                type = server.Type,
+                server.Remark,
+                server.Group,
+                endpoint = $"{server.Hostname}:{server.Port}",
+                supported = support.Supported,
+                supportMessage = support.Message,
+                latency
+            };
         });
         var modes = Global.Modes.Select((mode, index) =>
         {
@@ -189,18 +210,17 @@ internal static class Program
 
         var capabilityRequirements = new[]
         {
-            (Name: "Process routing", Files: new[] { "Redirector.bin", "nfapi.dll", "nfdriver.sys" }),
-            (Name: "TUN routing", Files: new[] { "RouteHelper.bin", "wintun.dll", "tun2socks.bin" }),
-            (Name: "Split DNS", Files: new[] { "aiodns.bin", "aiodns.conf" }),
-            (Name: "Network sharing", Files: new[] { "pcap2socks.exe" }),
-            (Name: "Legacy protocol fallback", Files: new[] { "v2ray-sn.exe" })
+            (Name: "Xray connections", Required: true, Files: new[] { "xray.exe" }),
+            (Name: "Process routing", Required: true, Files: new[] { "Redirector.bin", "nfapi.dll", "nfdriver.sys" }),
+            (Name: "TUN routing", Required: true, Files: new[] { "RouteHelper.bin", "wintun.dll", "tun2socks.bin" }),
+            (Name: "Network sharing", Required: false, Files: new[] { "pcap2socks.exe" })
         };
         var capabilities = capabilityRequirements.Select(capability =>
         {
             var missing = capability.Files
                 .Where(name => !File.Exists(Path.Combine(Global.NetchDir, "bin", name)))
                 .ToArray();
-            return new { name = capability.Name, available = missing.Length == 0, missing };
+            return new { name = capability.Name, capability.Required, available = missing.Length == 0, missing };
         }).ToArray();
         var missingHelpers = capabilities.SelectMany(capability => capability.missing).Distinct().ToArray();
 
@@ -240,6 +260,9 @@ internal static class Program
             return EngineResponse.Failure(request.Id, "server_not_found", "The selected server no longer exists.");
         if ((uint)parameters.ModeId >= (uint)Global.Modes.Count)
             return EngineResponse.Failure(request.Id, "mode_not_found", "The selected mode no longer exists.");
+        var support = ServerManagementService.Support(Global.Settings.Server[parameters.ServerId]);
+        if (!support.Supported)
+            return EngineResponse.Failure(request.Id, "unsupported_server", support.Message ?? "The selected server is not supported by the packaged runtime.");
         if (state.State != ConnectionState.Stopped && state.State != ConnectionState.Failed)
             return EngineResponse.Failure(request.Id, "invalid_state", "Disconnect the active profile before connecting again.");
 
@@ -249,11 +272,16 @@ internal static class Program
             Global.Modes[parameters.ModeId],
             headless: true);
         state.Transition(ConnectionState.Connected, "Connected");
+        await state.StartLiveLatencyAsync(
+            Global.Settings.Server[parameters.ServerId],
+            parameters.ServerId,
+            Global.Settings.StartedPingInterval);
         return EngineResponse.Success(request.Id, state.Snapshot());
     }
 
     private static async Task<EngineResponse> DisconnectAsync(long requestId, HostState state)
     {
+        await state.StopLiveLatencyAsync();
         if (state.State == ConnectionState.Stopped)
             return EngineResponse.Success(requestId, state.Snapshot());
 
@@ -261,6 +289,12 @@ internal static class Program
         await MainController.StopAsync();
         state.Transition(ConnectionState.Stopped, "Stopped");
         return EngineResponse.Success(requestId, state.Snapshot());
+    }
+
+    private static async Task<EngineResponse> ShutdownAsync(long requestId, HostState state)
+    {
+        await state.StopLiveLatencyAsync();
+        return EngineResponse.Success(requestId, state.Snapshot(), shutdown: true);
     }
 
     private static async Task<EngineResponse> ImportLegacyAsync(EngineRequest request, HostState state)
@@ -271,6 +305,7 @@ internal static class Program
         var parameters = request.Parameters.Deserialize<ImportParameters>(JsonOptions)
             ?? throw new ArgumentException("Import parameters are required.");
         var result = await LegacyImportService.ImportAsync(parameters.SourceRoot);
+        ServerLatencyService.Clear();
         state.Transition(ConnectionState.Stopped, "Import completed");
         return EngineResponse.Success(request.Id, new
         {
@@ -285,6 +320,94 @@ internal static class Program
         var parameters = request.Parameters.Deserialize<ModeIdParameters>(JsonOptions)
             ?? throw new ArgumentException("Mode parameters are required.");
         return ModeManagementService.GetDetail(parameters.ModeId);
+    }
+
+    private static ServerDetail GetServerDetail(EngineRequest request)
+    {
+        var parameters = request.Parameters.Deserialize<ServerIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Server parameters are required.");
+        return ServerManagementService.GetDetail(parameters.ServerId);
+    }
+
+    private static async Task<EngineResponse> SaveServerAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "editing a server");
+        var parameters = request.Parameters.Deserialize<ServerEditRequest>(JsonOptions)
+            ?? throw new ArgumentException("Server edit parameters are required.");
+        var result = await ServerManagementService.SaveAsync(parameters);
+        ServerLatencyService.Clear();
+        state.Transition(ConnectionState.Stopped, parameters.ServerId == null ? "Server created" : "Server saved");
+        return EngineResponse.Success(request.Id, new
+        {
+            result.Server,
+            result.BackupDirectory,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> DuplicateServerAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "duplicating a server");
+        var parameters = request.Parameters.Deserialize<ServerIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Server parameters are required.");
+        var result = await ServerManagementService.DuplicateAsync(parameters.ServerId);
+        ServerLatencyService.Clear();
+        state.Transition(ConnectionState.Stopped, "Server duplicated");
+        return EngineResponse.Success(request.Id, new
+        {
+            result.Server,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> ImportServerLinkAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "importing a server link");
+        var parameters = request.Parameters.Deserialize<ServerLinkParameters>(JsonOptions)
+            ?? throw new ArgumentException("Server link parameters are required.");
+        var result = await ServerShareLinkService.ImportAsync(parameters.Link);
+        ServerLatencyService.Clear();
+        state.Transition(ConnectionState.Stopped, "Server link imported");
+        return EngineResponse.Success(request.Id, new
+        {
+            result.Server,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> DeleteServerAsync(EngineRequest request, HostState state)
+    {
+        RequireStopped(state, "deleting a server");
+        var parameters = request.Parameters.Deserialize<ServerIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Server parameters are required.");
+        var result = await ServerManagementService.DeleteAsync(parameters.ServerId);
+        ServerLatencyService.Clear();
+        state.Transition(ConnectionState.Stopped, "Server deleted");
+        return EngineResponse.Success(request.Id, new
+        {
+            result.DeletedRemark,
+            result.DeletedType,
+            result.BackupDirectory,
+            snapshot = BuildSnapshot(state)
+        });
+    }
+
+    private static async Task<EngineResponse> TestServerLatencyAsync(EngineRequest request, HostState state)
+    {
+        if (state.State is ConnectionState.Starting or ConnectionState.Stopping)
+            return EngineResponse.Failure(request.Id, "invalid_state", "Wait for the current engine transition before testing latency.");
+        var parameters = request.Parameters.Deserialize<ServerIdParameters>(JsonOptions)
+            ?? throw new ArgumentException("Server parameters are required.");
+        if ((uint)parameters.ServerId >= (uint)Global.Settings.Server.Count)
+            return EngineResponse.Failure(request.Id, "server_not_found", "The selected server no longer exists.");
+        return EngineResponse.Success(request.Id, await ServerLatencyService.TestAsync(parameters.ServerId));
+    }
+
+    private static async Task<EngineResponse> TestAllServerLatenciesAsync(EngineRequest request, HostState state)
+    {
+        if (state.State is ConnectionState.Starting or ConnectionState.Stopping)
+            return EngineResponse.Failure(request.Id, "invalid_state", "Wait for the current engine transition before testing latency.");
+        return EngineResponse.Success(request.Id, await ServerLatencyService.TestAllAsync());
     }
 
     private static async Task<EngineResponse> SaveModeAsync(EngineRequest request, HostState state)
@@ -384,6 +507,10 @@ internal static class Program
 
     private sealed record ModeIdParameters(int ModeId);
 
+    private sealed record ServerIdParameters(int ServerId);
+
+    private sealed record ServerLinkParameters(string Link);
+
     private sealed record SaveModeParameters(
         int? ModeId,
         string Type,
@@ -423,6 +550,8 @@ internal static class Program
     {
         private readonly object _sync = new();
         private string _message = "Stopped";
+        private CancellationTokenSource? _liveLatencyCancellation;
+        private Task? _liveLatencyTask;
 
         public HostState(string runtimeKind)
         {
@@ -449,6 +578,56 @@ internal static class Program
         }
 
         public void Failed(string message) => Transition(ConnectionState.Failed, message);
+
+        public async Task StartLiveLatencyAsync(Server server, int serverId, int intervalSeconds)
+        {
+            await StopLiveLatencyAsync();
+            if (intervalSeconds <= 0)
+                return;
+
+            var cancellation = new CancellationTokenSource();
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    while (true)
+                    {
+                        cancellation.Token.ThrowIfCancellationRequested();
+                        _ = await ServerLatencyService.TryTestAsync(server, serverId, cancellation.Token);
+                        await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), cancellation.Token);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    // Expected during disconnect, shutdown, or host disposal.
+                }
+            });
+            lock (_sync)
+            {
+                _liveLatencyCancellation = cancellation;
+                _liveLatencyTask = task;
+            }
+        }
+
+        public async Task StopLiveLatencyAsync()
+        {
+            CancellationTokenSource? cancellation;
+            Task? task;
+            lock (_sync)
+            {
+                cancellation = _liveLatencyCancellation;
+                task = _liveLatencyTask;
+                _liveLatencyCancellation = null;
+                _liveLatencyTask = null;
+            }
+
+            if (cancellation == null)
+                return;
+            await cancellation.CancelAsync();
+            if (task != null)
+                await task;
+            cancellation.Dispose();
+        }
 
         public object Snapshot()
         {

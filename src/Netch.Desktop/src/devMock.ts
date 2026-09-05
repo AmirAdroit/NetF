@@ -5,6 +5,11 @@ import type {
   EngineSnapshot,
   ModeDetail,
   ModeEditRequest,
+  ServerConfigurationDetail,
+  ServerDetail,
+  ServerEditRequest,
+  ServerLinkImportRequest,
+  ServerLatencyResult,
 } from "./engine";
 import type { DesktopSettings } from "./desktop";
 
@@ -25,8 +30,8 @@ let snapshot: EngineSnapshot = {
   apiVersion: 1,
   status: { state: "stopped", message: "Stopped" },
   servers: [
-    { id: 0, type: "SOCKS", remark: "Throne", group: "NONE" },
-    { id: 1, type: "VLESS", remark: "Primary Xray", group: "Personal" },
+    { id: 0, type: "SOCKS", remark: "Throne", group: "NONE", endpoint: "127.0.0.1:2080", supported: true, supportMessage: "Ready" },
+    { id: 1, type: "VLESS", remark: "Primary Xray", group: "Personal", endpoint: "vpn.example.com:443", supported: true, supportMessage: "Ready" },
   ],
   modes: modeNames.map(([remark, origin], id) => ({
     id,
@@ -40,14 +45,64 @@ let snapshot: EngineSnapshot = {
   })),
   missingHelpers: ["pcap2socks.exe"],
   capabilities: [
-    { name: "Process routing", available: true, missing: [] },
-    { name: "TUN routing", available: true, missing: [] },
-    { name: "Split DNS", available: true, missing: [] },
-    { name: "Network sharing", available: false, missing: ["pcap2socks.exe"] },
+    { name: "Xray connections", available: true, required: true, missing: [] },
+    { name: "Process routing", available: true, required: true, missing: [] },
+    { name: "TUN routing", available: true, required: true, missing: [] },
+    { name: "Network sharing", available: false, required: false, missing: ["pcap2socks.exe"] },
   ],
   coreSource: "owned-runtime",
   proxyCores: ["direct SOCKS", "Xray"],
 };
+
+const emptyServerConfiguration = (): ServerConfigurationDetail => ({
+  username: null,
+  hasPassword: false,
+  version: null,
+  remoteHostname: null,
+  encryptMethod: null,
+  hasUserId: false,
+  alterId: null,
+  transferProtocol: null,
+  packetEncoding: null,
+  fakeType: null,
+  host: null,
+  serverName: null,
+  path: null,
+  tlsSecureType: null,
+  useMux: null,
+  localAddresses: null,
+  peerPublicKey: null,
+  hasPrivateKey: false,
+  hasPreSharedKey: false,
+  mtu: null,
+});
+
+const serverDetails = new Map<number, ServerDetail>([
+  [0, {
+    ...snapshot.servers[0],
+    hostname: "127.0.0.1",
+    port: 2080,
+    configuration: { ...emptyServerConfiguration(), username: "demo", hasPassword: true, version: "5" },
+  }],
+  [1, {
+    ...snapshot.servers[1],
+    hostname: "vpn.example.com",
+    port: 443,
+    configuration: {
+      ...emptyServerConfiguration(),
+      hasUserId: true,
+      encryptMethod: "none",
+      transferProtocol: "ws",
+      packetEncoding: "xudp",
+      fakeType: "none",
+      host: "cdn.example.com",
+      serverName: "vpn.example.com",
+      path: "/socket",
+      tlsSecureType: "tls",
+      useMux: false,
+    },
+  }],
+]);
 
 const details = new Map<number, ModeDetail>(snapshot.modes.map((mode) => [mode.id, {
   ...mode,
@@ -67,8 +122,16 @@ let settings: EngineSettings = {
   handleOnlyDns: true,
   dnsProxy: true,
   dnsHost: "1.1.1.1:53",
+  filterParent: false,
   filterIcmp: false,
   icmpDelay: 10,
+  tunAddress: "10.0.236.10",
+  tunNetmask: "255.255.255.0",
+  tunGateway: "10.0.236.1",
+  tunUseCustomDns: true,
+  tunDns: "1.1.1.1",
+  tunProxyDns: false,
+  liveLatencyIntervalSeconds: -1,
   allowInsecure: false,
   useMux: false,
   xrayCone: true,
@@ -76,8 +139,9 @@ let settings: EngineSettings = {
 };
 
 let desktopSettings: DesktopSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   runAtWindowsLogin: false,
+  closeBehavior: "hideToTray",
 };
 
 export async function installDevelopmentMock() {
@@ -88,18 +152,31 @@ export async function installDevelopmentMock() {
     if (command === "retry_desktop_startup") return { phase: "ready", message: "NetF is ready", elapsedMs: 420, retryable: false };
     if (command === "runtime_info") return {
       runtimeRoot: "C:\\Users\\Demo\\AppData\\Local\\NetF\\runtime",
-      runtimeVersion: "0.1.0",
+      runtimeVersion: "0.2.0",
       backend: {
-        id: "netch-compat",
-        displayName: "Netch compatibility engine",
-        version: "0.1.0",
+        id: "netf-engine",
+        displayName: "NetF engine",
+        version: "0.2.0",
         apiVersion: 1,
         capabilities: ["snapshot", "status", "connect", "disconnect"],
         components: [],
       },
     };
     if (command === "open_owned_folder") return null;
+    if (command === "previous_netf_data_available") return false;
     if (command === "engine_snapshot") return snapshot;
+    if (command === "server_detail") return serverDetails.get(Number(payload?.serverId));
+    if (command === "test_server_latency") {
+      const serverId = Number(payload?.serverId);
+      const result: ServerLatencyResult = { serverId, status: "success", method: settings.serverTcpPing ? "tcp" : "icmp", latencyMs: 42 + serverId, testedAtUtc: new Date().toISOString() };
+      snapshot = { ...snapshot, servers: snapshot.servers.map((server) => server.id === serverId ? { ...server, latency: result } : server) };
+      return result;
+    }
+    if (command === "test_all_server_latencies") {
+      const results = snapshot.servers.map((server) => ({ serverId: server.id, status: "success" as const, method: settings.serverTcpPing ? "tcp" as const : "icmp" as const, latencyMs: 42 + server.id, testedAtUtc: new Date().toISOString() }));
+      snapshot = { ...snapshot, servers: snapshot.servers.map((server) => ({ ...server, latency: results.find((result) => result.serverId === server.id) })) };
+      return { results, total: results.length, timedOut: false };
+    }
     if (command === "mode_detail") return details.get(Number(payload?.modeId));
     if (command === "engine_logs") return {
       source: "logging/application.log",
@@ -128,6 +205,108 @@ export async function installDevelopmentMock() {
     if (command === "update_desktop_settings") {
       desktopSettings = payload?.settings as DesktopSettings;
       return desktopSettings;
+    }
+    if (command === "save_server") {
+      const request = payload?.request as ServerEditRequest;
+      const previous = request.serverId === null ? undefined : serverDetails.get(request.serverId);
+      const id = previous?.id ?? snapshot.servers.length;
+      const input = request.configuration;
+      const hasSecret = (update: { action: string; value?: string } | undefined, saved: boolean) =>
+        update?.action === "keep" ? saved : update?.action === "replace" ? Boolean(update.value) : false;
+      const configuration: ServerConfigurationDetail = {
+        username: input.username ?? null,
+        hasPassword: hasSecret(input.password, previous?.configuration.hasPassword ?? false),
+        version: input.version ?? null,
+        remoteHostname: input.remoteHostname ?? null,
+        encryptMethod: input.encryptMethod ?? null,
+        hasUserId: hasSecret(input.userId, previous?.configuration.hasUserId ?? false),
+        alterId: input.alterId ?? null,
+        transferProtocol: input.transferProtocol ?? null,
+        packetEncoding: input.packetEncoding ?? null,
+        fakeType: input.fakeType ?? null,
+        host: input.host ?? null,
+        serverName: input.serverName ?? null,
+        path: input.path ?? null,
+        tlsSecureType: input.tlsSecureType ?? null,
+        useMux: input.useMux ?? null,
+        localAddresses: input.localAddresses ?? null,
+        peerPublicKey: input.peerPublicKey ?? null,
+        hasPrivateKey: hasSecret(input.privateKey, previous?.configuration.hasPrivateKey ?? false),
+        hasPreSharedKey: hasSecret(input.preSharedKey, previous?.configuration.hasPreSharedKey ?? false),
+        mtu: input.mtu ?? null,
+      };
+      const server: ServerDetail = {
+        id,
+        type: request.type,
+        remark: request.remark,
+        group: previous?.group ?? "NONE",
+        hostname: request.hostname,
+        port: request.port,
+        endpoint: `${request.hostname}:${request.port}`,
+        supported: true,
+        supportMessage: "Ready",
+        configuration,
+      };
+      serverDetails.set(id, server);
+      snapshot = { ...snapshot, servers: [...snapshot.servers.filter((item) => item.id !== id), server] };
+      return { server, snapshot };
+    }
+    if (command === "import_server_link") {
+      const request = payload?.request as ServerLinkImportRequest;
+      const scheme = request.link.slice(0, request.link.indexOf(":"));
+      const type = ({ vless: "VLESS", vmess: "VMess", trojan: "Trojan", ss: "SS", socks: "SOCKS", socks5: "SOCKS" } as Record<string, string>)[scheme.toLocaleLowerCase()] ?? "VLESS";
+      const id = snapshot.servers.length;
+      const configuration = {
+        ...emptyServerConfiguration(),
+        hasPassword: type === "Trojan" || type === "SS" || type === "SOCKS",
+        hasUserId: type === "VLESS" || type === "VMess",
+        encryptMethod: type === "VLESS" ? "none" : type === "VMess" ? "auto" : null,
+        transferProtocol: type === "VLESS" || type === "VMess" ? "ws" : null,
+        packetEncoding: type === "VLESS" || type === "VMess" ? "xudp" : null,
+        fakeType: type === "VLESS" || type === "VMess" ? "none" : null,
+        path: type === "VLESS" || type === "VMess" ? "/" : null,
+        tlsSecureType: type === "Trojan" ? "tls" : "none",
+      };
+      const server: ServerDetail = {
+        id,
+        type,
+        remark: `Imported ${type}`,
+        group: "NONE",
+        hostname: "imported.example.com",
+        port: 443,
+        endpoint: "imported.example.com:443",
+        supported: true,
+        supportMessage: "Ready",
+        configuration,
+      };
+      serverDetails.set(id, server);
+      snapshot = { ...snapshot, servers: [...snapshot.servers, server] };
+      return { server, snapshot };
+    }
+    if (command === "duplicate_server") {
+      const source = serverDetails.get(Number(payload?.serverId))!;
+      const id = snapshot.servers.length;
+      const server = { ...source, id, remark: `${source.remark} copy`, configuration: { ...source.configuration } };
+      serverDetails.set(id, server);
+      snapshot = { ...snapshot, servers: [...snapshot.servers, server] };
+      return { server, snapshot };
+    }
+    if (command === "delete_server") {
+      const serverId = Number(payload?.serverId);
+      const deleted = serverDetails.get(serverId)!;
+      const remaining = snapshot.servers
+        .filter((server) => server.id !== serverId)
+        .map((server) => serverDetails.get(server.id)!);
+      serverDetails.clear();
+      snapshot = {
+        ...snapshot,
+        servers: remaining.map((server, id) => {
+          const remapped = { ...server, id };
+          serverDetails.set(id, remapped);
+          return remapped;
+        }),
+      };
+      return { deletedRemark: deleted.remark, deletedType: deleted.type, backupDirectory: "C:\\Users\\Demo\\AppData\\Local\\NetF\\runtime\\data\\deleted-server-backups\\sample", snapshot };
     }
     if (command === "save_mode") {
       const request = payload?.request as ModeEditRequest;

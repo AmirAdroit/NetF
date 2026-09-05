@@ -43,7 +43,7 @@ Desktop controller and replaceable EngineBackend (Rust)
   |
   | bounded JSON-line IPC over supervised child stdio during migration
   v
-Netch engine/broker (.NET migration bridge)
+NetF engine host (`netf-engine-host.exe`, inherited .NET migration bridge)
   |
   | FFI and supervised sidecars
   v
@@ -57,9 +57,11 @@ runtime path. Rust verifies a packaged SHA-256 manifest and installs the owned
 runtime into private local application data. Packaged built-in assets are
 upgradeable while mutable settings and custom modes are preserved.
 
-A native folder picker may select an old Netch directory only for import. The
-engine validates and transactionally imports settings and custom modes, creates
-a rollback backup, and never copies or executes the source `bin` directory.
+A native folder picker may select a configuration directory only for import.
+The one-click previous-data action resolves the fixed prior NetF path in Rust;
+React supplies no path. The engine validates and transactionally imports settings
+and custom modes, creates a rollback backup, and never copies or executes source
+binaries, logs, caches, WebView data, or geo assets.
 Native/helper stdout is treated as untrusted noise and filtered before typed
 protocol envelopes reach command handling. Requests have operation-specific
 response deadlines so a damaged helper cannot block the UI indefinitely.
@@ -95,9 +97,9 @@ specific operations rather than arbitrary commands.
 ### Engine backend boundary
 
 `EngineBackend` is the desktop-facing interface. The current
-`NetchCompatibilityBackend` validates backend identity, API version, required
+`EngineHostBackend` validates the `netf-engine` identity, API version, required
 capabilities, backend version, and component versions before publishing Ready.
-Future engines must implement this boundary instead of adding Netch-specific
+Future engines must implement this boundary instead of adding provider-specific
 behavior to React or Tauri command handlers.
 
 ### Engine
@@ -120,10 +122,15 @@ behavior to React or Tauri command handlers.
 
 The versioned IPC contract currently implements:
 
-- `hello`, `snapshot`, and owned-runtime legacy import;
+- `hello`, `snapshot`, generic folder import, and fixed previous-NetF-data import;
 - `connect(server_id, mode_id)` and `disconnect`;
+- `serverDetail`, `saveServer`, `importServerLink`, `duplicateServer`, and `deleteServer` for typed,
+  stopped-state server operations. Details expose only secret-presence booleans;
+  secret values never cross into Rust or React;
 - `modeDetail`, `saveMode`, `mergeMode`, and `deleteMode` for typed mode operations;
 - `settings` and `updateSettings` for the allowlisted operational subset;
+- `testServerLatency(serverId)` and `testAllServerLatencies` for bounded,
+  credential-free DNS plus TCP/ICMP endpoint reachability;
 - `desktopStartupStatus` and `configureDesktopStartup` for one fixed, verified
   per-user Windows Scheduled Task;
 - `logs` for the bounded, redacted application-log tail.
@@ -140,11 +147,33 @@ handshake, initial snapshot, and total duration. State transitions, generic
 cleanup failures, unexpected health failures, and aggregate serialized
 three-second probe timings are recorded without profile data or credentials.
 
+Endpoint latency is not an Xray authentication or end-to-end proxy check. The
+frontend supplies only a server ID. EngineHost resolves the stored endpoint,
+runs three one-second probes after a bounded DNS lookup, serializes manual/all
+tests, and caps all-server concurrency. When `StartedPingInterval` is enabled,
+EngineHost monitors only the connected server and cancels its token before
+disconnect, shutdown, server replacement, or process exit. React only refreshes
+and renders the structured result.
+
 The Rust/Tauri layer mirrors these as narrow typed commands and selects the
-legacy import folder natively. Planned operations include server/subscription
-editing, latency tests, typed event streaming, bandwidth, and structured
+generic import folder natively. `importServerLink` accepts one bounded string,
+but parses it only in the .NET authority through `ServerShareLinkService`; the
+legacy bulk parser is not used because it logs failures and recognizes provider
+shapes outside the packaged runtime. The parser is offline, rejects unknown or
+duplicate options, validates the resulting typed server through the same save
+path, and returns only credential-free server detail. Planned operations include subscription
+management, typed event streaming, bandwidth, and structured
 diagnostics export. Neither layer exposes arbitrary file paths, executables,
 shell commands, helper arguments, or raw credentials to the webview.
+
+The Tauri product identifier is `io.github.amiradroit.netf`, so 0.2.0 starts in
+a clean local-data directory. The old `org.netchfork.preview` directory is read
+only after explicit opt-in and remains untouched as a rollback source.
+
+Desktop settings schema 2 adds `hideToTray`/`exit` close behavior and migrates
+schema 1 atomically. Both window-close Exit and tray Exit call one single-flight
+controller shutdown path. A disconnect or host-shutdown failure clears the exit
+guard, restores the window, reports the failure, and does not claim cleanup.
 
 Connection state is an explicit state machine:
 

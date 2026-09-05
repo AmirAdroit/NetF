@@ -4,11 +4,14 @@ use crate::core::desktop::{
 use crate::core::engine::{
     EngineLogResult, EngineSettings, EngineSnapshot, EngineStatus, LegacyImportResult,
     ModeDeleteResult, ModeDetail, ModeEditRequest, ModeMergeResult, ModeSaveResult,
+    ServerDeleteResult, ServerDetail, ServerEditRequest, ServerLatencyBatchResult,
+    ServerLatencyResult, ServerLinkImportRequest, ServerSaveResult,
 };
 use crate::core::scanner::{self, ScanReport};
 use crate::core::settings::{DesktopSettings, DesktopStartupStatus};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 const LEGACY_DEFAULT_MAX_RESULTS: usize = 50;
@@ -83,7 +86,7 @@ pub async fn import_legacy_configuration(
         let Some(selected) = app
             .dialog()
             .file()
-            .set_title("Import configuration from an existing Netch installation")
+            .set_title("Import an existing configuration")
             .blocking_pick_folder()
         else {
             return Ok(None);
@@ -102,7 +105,159 @@ pub async fn import_legacy_configuration(
             .map_err(DesktopError::from)
     })
     .await
-    .map_err(|error| task_error("legacy import", error))?
+    .map_err(|error| task_error("configuration import", error))?
+}
+
+fn previous_netf_runtime_from_current(current: &std::path::Path) -> Result<PathBuf, DesktopError> {
+    let parent = current.parent().ok_or_else(|| {
+        DesktopError::new(
+            "previous_data_path_failed",
+            "NetF local data directory had no parent.",
+            false,
+        )
+    })?;
+    Ok(parent.join("org.netchfork.preview").join("runtime"))
+}
+
+fn previous_netf_runtime(app: &AppHandle) -> Result<PathBuf, DesktopError> {
+    let current = app.path().app_local_data_dir().map_err(|error| {
+        DesktopError::new("previous_data_path_failed", error.to_string(), false)
+    })?;
+    previous_netf_runtime_from_current(&current)
+}
+
+#[tauri::command]
+pub fn previous_netf_data_available(app: AppHandle) -> Result<bool, DesktopError> {
+    let root = previous_netf_runtime(&app)?;
+    Ok(root.join("data/settings.json").is_file() && root.join("mode").is_dir())
+}
+
+#[tauri::command]
+pub async fn import_previous_netf_configuration(
+    app: AppHandle,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<LegacyImportResult, DesktopError> {
+    let source = previous_netf_runtime(&app)?;
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .import_legacy(&source)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("previous NetF import", error))?
+}
+
+#[tauri::command]
+pub async fn server_detail(
+    server_id: usize,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerDetail, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .server_detail(server_id)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server detail", error))?
+}
+
+#[tauri::command]
+pub async fn save_server(
+    request: ServerEditRequest,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerSaveResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .save_server(request)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server save", error))?
+}
+
+#[tauri::command]
+pub async fn import_server_link(
+    request: ServerLinkImportRequest,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerSaveResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .import_server_link(request)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server link import", error))?
+}
+
+#[tauri::command]
+pub async fn duplicate_server(
+    server_id: usize,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerSaveResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .duplicate_server(server_id)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server duplication", error))?
+}
+
+#[tauri::command]
+pub async fn delete_server(
+    server_id: usize,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerDeleteResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .delete_server(server_id)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server deletion", error))?
+}
+
+#[tauri::command]
+pub async fn test_server_latency(
+    server_id: usize,
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerLatencyResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .test_server_latency(server_id)
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("server latency test", error))?
+}
+
+#[tauri::command]
+pub async fn test_all_server_latencies(
+    state: State<'_, Arc<DesktopController>>,
+) -> Result<ServerLatencyBatchResult, DesktopError> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .ready_backend()?
+            .test_all_server_latencies()
+            .map_err(DesktopError::from)
+    })
+    .await
+    .map_err(|error| task_error("all-server latency test", error))?
 }
 
 #[tauri::command]
@@ -281,4 +436,24 @@ pub async fn update_desktop_settings(
     tauri::async_runtime::spawn_blocking(move || controller.update_desktop_settings(settings))
         .await
         .map_err(|error| task_error("desktop settings update", error))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn previous_data_path_is_fixed_beside_the_current_identity() {
+        let current = PathBuf::from(r"C:\Users\Amir\AppData\Local\io.github.amiradroit.netf");
+        let previous = previous_netf_runtime_from_current(&current).expect("previous data path");
+        assert_eq!(
+            previous,
+            PathBuf::from(r"C:\Users\Amir\AppData\Local\org.netchfork.preview\runtime")
+        );
+    }
+
+    #[test]
+    fn previous_data_path_rejects_a_parentless_path() {
+        assert!(previous_netf_runtime_from_current(std::path::Path::new("")).is_err());
+    }
 }
