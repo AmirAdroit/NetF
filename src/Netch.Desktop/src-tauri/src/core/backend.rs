@@ -1,7 +1,8 @@
 use super::engine::{
     EngineAttachment, EngineError, EngineLogResult, EngineSettings, EngineSnapshot, EngineStatus,
     EngineSupervisor, LegacyImportResult, ModeDeleteResult, ModeDetail, ModeEditRequest,
-    ModeMergeResult, ModeSaveResult,
+    ModeMergeResult, ModeSaveResult, ServerDeleteResult, ServerDetail, ServerEditRequest,
+    ServerLatencyBatchResult, ServerLatencyResult, ServerLinkImportRequest, ServerSaveResult,
 };
 use super::settings::DesktopStartupStatus;
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,16 @@ pub trait EngineBackend: Send + Sync {
     fn disconnect(&self) -> Result<EngineStatus, EngineError>;
     fn shutdown(&self) -> Result<(), EngineError>;
     fn import_legacy(&self, source_root: &Path) -> Result<LegacyImportResult, EngineError>;
+    fn server_detail(&self, server_id: usize) -> Result<ServerDetail, EngineError>;
+    fn save_server(&self, request: ServerEditRequest) -> Result<ServerSaveResult, EngineError>;
+    fn import_server_link(
+        &self,
+        request: ServerLinkImportRequest,
+    ) -> Result<ServerSaveResult, EngineError>;
+    fn duplicate_server(&self, server_id: usize) -> Result<ServerSaveResult, EngineError>;
+    fn delete_server(&self, server_id: usize) -> Result<ServerDeleteResult, EngineError>;
+    fn test_server_latency(&self, server_id: usize) -> Result<ServerLatencyResult, EngineError>;
+    fn test_all_server_latencies(&self) -> Result<ServerLatencyBatchResult, EngineError>;
     fn mode_detail(&self, mode_id: usize) -> Result<ModeDetail, EngineError>;
     fn save_mode(&self, request: ModeEditRequest) -> Result<ModeSaveResult, EngineError>;
     fn merge_modes(
@@ -60,12 +71,12 @@ pub trait EngineBackend: Send + Sync {
 }
 
 #[derive(Default)]
-pub struct NetchCompatibilityBackend {
+pub struct EngineHostBackend {
     supervisor: EngineSupervisor,
     info: Mutex<Option<BackendInfo>>,
 }
 
-impl EngineBackend for NetchCompatibilityBackend {
+impl EngineBackend for EngineHostBackend {
     fn attach(&self, runtime_root: &Path) -> Result<EngineAttachment, EngineError> {
         let attachment = self.supervisor.attach(runtime_root)?;
         *self
@@ -102,6 +113,37 @@ impl EngineBackend for NetchCompatibilityBackend {
 
     fn import_legacy(&self, source_root: &Path) -> Result<LegacyImportResult, EngineError> {
         self.supervisor.import_legacy(source_root)
+    }
+
+    fn server_detail(&self, server_id: usize) -> Result<ServerDetail, EngineError> {
+        self.supervisor.server_detail(server_id)
+    }
+
+    fn save_server(&self, request: ServerEditRequest) -> Result<ServerSaveResult, EngineError> {
+        self.supervisor.save_server(request)
+    }
+
+    fn import_server_link(
+        &self,
+        request: ServerLinkImportRequest,
+    ) -> Result<ServerSaveResult, EngineError> {
+        self.supervisor.import_server_link(request)
+    }
+
+    fn duplicate_server(&self, server_id: usize) -> Result<ServerSaveResult, EngineError> {
+        self.supervisor.duplicate_server(server_id)
+    }
+
+    fn delete_server(&self, server_id: usize) -> Result<ServerDeleteResult, EngineError> {
+        self.supervisor.delete_server(server_id)
+    }
+
+    fn test_server_latency(&self, server_id: usize) -> Result<ServerLatencyResult, EngineError> {
+        self.supervisor.test_server_latency(server_id)
+    }
+
+    fn test_all_server_latencies(&self) -> Result<ServerLatencyBatchResult, EngineError> {
+        self.supervisor.test_all_server_latencies()
     }
 
     fn mode_detail(&self, mode_id: usize) -> Result<ModeDetail, EngineError> {

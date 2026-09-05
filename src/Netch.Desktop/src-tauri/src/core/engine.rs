@@ -14,6 +14,7 @@ use super::settings::DesktopStartupStatus;
 
 const MAXIMUM_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAXIMUM_STALE_RESPONSES: usize = 64;
+const MAXIMUM_SERVER_LINK_CHARACTERS: usize = 8192;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,139 @@ pub struct ServerSummary {
     pub server_type: String,
     pub remark: String,
     pub group: String,
+    #[serde(default)]
+    pub endpoint: String,
+    #[serde(default)]
+    pub supported: bool,
+    #[serde(default)]
+    pub support_message: Option<String>,
+    #[serde(default)]
+    pub latency: Option<ServerLatencyResult>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerLatencyResult {
+    pub server_id: usize,
+    pub status: String,
+    pub method: String,
+    pub latency_ms: Option<i32>,
+    pub tested_at_utc: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerLatencyBatchResult {
+    pub results: Vec<ServerLatencyResult>,
+    pub total: usize,
+    pub timed_out: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SecretUpdate {
+    pub action: String,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerConfigurationInput {
+    pub username: Option<String>,
+    pub password: Option<SecretUpdate>,
+    pub version: Option<String>,
+    pub remote_hostname: Option<String>,
+    pub encrypt_method: Option<String>,
+    pub user_id: Option<SecretUpdate>,
+    pub alter_id: Option<i32>,
+    pub transfer_protocol: Option<String>,
+    pub packet_encoding: Option<String>,
+    pub fake_type: Option<String>,
+    pub host: Option<String>,
+    pub server_name: Option<String>,
+    pub path: Option<String>,
+    pub tls_secure_type: Option<String>,
+    pub use_mux: Option<bool>,
+    pub local_addresses: Option<String>,
+    pub peer_public_key: Option<String>,
+    pub private_key: Option<SecretUpdate>,
+    pub pre_shared_key: Option<SecretUpdate>,
+    pub mtu: Option<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerEditRequest {
+    pub server_id: Option<usize>,
+    #[serde(rename = "type")]
+    pub server_type: String,
+    pub remark: String,
+    pub hostname: String,
+    pub port: u16,
+    pub configuration: ServerConfigurationInput,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerLinkImportRequest {
+    pub link: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerConfigurationDetail {
+    pub username: Option<String>,
+    pub has_password: bool,
+    pub version: Option<String>,
+    pub remote_hostname: Option<String>,
+    pub encrypt_method: Option<String>,
+    pub has_user_id: bool,
+    pub alter_id: Option<i32>,
+    pub transfer_protocol: Option<String>,
+    pub packet_encoding: Option<String>,
+    pub fake_type: Option<String>,
+    pub host: Option<String>,
+    pub server_name: Option<String>,
+    pub path: Option<String>,
+    pub tls_secure_type: Option<String>,
+    pub use_mux: Option<bool>,
+    pub local_addresses: Option<String>,
+    pub peer_public_key: Option<String>,
+    pub has_private_key: bool,
+    pub has_pre_shared_key: bool,
+    pub mtu: Option<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDetail {
+    pub id: usize,
+    #[serde(rename = "type")]
+    pub server_type: String,
+    pub remark: String,
+    pub group: String,
+    pub hostname: String,
+    pub port: u16,
+    pub supported: bool,
+    pub support_message: Option<String>,
+    pub configuration: ServerConfigurationDetail,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerSaveResult {
+    pub server: ServerDetail,
+    pub backup_directory: Option<String>,
+    pub snapshot: EngineSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDeleteResult {
+    pub deleted_remark: String,
+    pub deleted_type: String,
+    pub backup_directory: String,
+    pub snapshot: EngineSnapshot,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -125,8 +259,16 @@ pub struct EngineSettings {
     pub handle_only_dns: bool,
     pub dns_proxy: bool,
     pub dns_host: String,
+    pub filter_parent: bool,
     pub filter_icmp: bool,
     pub icmp_delay: i32,
+    pub tun_address: String,
+    pub tun_netmask: String,
+    pub tun_gateway: String,
+    pub tun_use_custom_dns: bool,
+    pub tun_dns: String,
+    pub tun_proxy_dns: bool,
+    pub live_latency_interval_seconds: i32,
     pub allow_insecure: bool,
     pub use_mux: bool,
     pub xray_cone: bool,
@@ -162,6 +304,8 @@ pub struct EngineSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapability {
     pub name: String,
+    #[serde(default)]
+    pub required: bool,
     pub available: bool,
     pub missing: Vec<String>,
 }
@@ -176,19 +320,19 @@ pub struct LegacyImportResult {
 
 #[derive(Debug, Error)]
 pub enum EngineError {
-    #[error("The selected directory is not a Netch runtime: {0}")]
+    #[error("The selected directory is not a compatible NetF configuration: {0}")]
     InvalidRuntime(String),
-    #[error("The Netch engine host is not prepared: {0}")]
+    #[error("The NetF engine host is not prepared: {0}")]
     HostUnavailable(String),
-    #[error("Could not start the Netch engine host: {0}")]
+    #[error("Could not start the NetF engine host: {0}")]
     Start(String),
-    #[error("The Netch engine host stopped unexpectedly{0}")]
+    #[error("The NetF engine host stopped unexpectedly{0}")]
     Stopped(String),
-    #[error("The Netch engine protocol failed: {0}")]
+    #[error("The NetF engine protocol failed: {0}")]
     Protocol(String),
-    #[error("The Netch engine rejected the request: {code}: {message}")]
+    #[error("The NetF engine rejected the request: {code}: {message}")]
     Rejected { code: String, message: String },
-    #[error("Attach a Netch runtime before using the engine.")]
+    #[error("Start the NetF runtime before using the engine.")]
     NotAttached,
     #[error("Disconnect the active profile before changing the attached runtime.")]
     ActiveRuntime,
@@ -308,6 +452,53 @@ impl EngineSupervisor {
                 json!({ "sourceRoot": source_root.display().to_string() }),
             )
         })
+    }
+
+    pub fn server_detail(&self, server_id: usize) -> Result<ServerDetail, EngineError> {
+        self.with_process(|process| {
+            process.request("serverDetail", json!({ "serverId": server_id }))
+        })
+    }
+
+    pub fn save_server(&self, request: ServerEditRequest) -> Result<ServerSaveResult, EngineError> {
+        let value = serde_json::to_value(request)
+            .map_err(|error| EngineError::Protocol(error.to_string()))?;
+        self.with_process(|process| process.request("saveServer", value))
+    }
+
+    pub fn import_server_link(
+        &self,
+        request: ServerLinkImportRequest,
+    ) -> Result<ServerSaveResult, EngineError> {
+        validate_server_link_request(&request)?;
+        let value = serde_json::to_value(request)
+            .map_err(|error| EngineError::Protocol(error.to_string()))?;
+        self.with_process(|process| process.request("importServerLink", value))
+    }
+
+    pub fn duplicate_server(&self, server_id: usize) -> Result<ServerSaveResult, EngineError> {
+        self.with_process(|process| {
+            process.request("duplicateServer", json!({ "serverId": server_id }))
+        })
+    }
+
+    pub fn delete_server(&self, server_id: usize) -> Result<ServerDeleteResult, EngineError> {
+        self.with_process(|process| {
+            process.request("deleteServer", json!({ "serverId": server_id }))
+        })
+    }
+
+    pub fn test_server_latency(
+        &self,
+        server_id: usize,
+    ) -> Result<ServerLatencyResult, EngineError> {
+        self.with_process(|process| {
+            process.request("testServerLatency", json!({ "serverId": server_id }))
+        })
+    }
+
+    pub fn test_all_server_latencies(&self) -> Result<ServerLatencyBatchResult, EngineError> {
+        self.with_process(|process| process.request("testAllServerLatencies", json!({})))
     }
 
     pub fn mode_detail(&self, mode_id: usize) -> Result<ModeDetail, EngineError> {
@@ -620,12 +811,35 @@ fn parse_protocol_line(line: &str) -> Option<WireResponse> {
     serde_json::from_str(line).ok()
 }
 
+fn validate_server_link_request(request: &ServerLinkImportRequest) -> Result<(), EngineError> {
+    let link = request.link.trim();
+    if link.is_empty()
+        || link.chars().count() > MAXIMUM_SERVER_LINK_CHARACTERS
+        || link
+            .chars()
+            .any(|character| matches!(character, '\r' | '\n' | '\0'))
+    {
+        return Err(EngineError::Protocol(
+            "server link must be one non-empty URI of at most 8192 characters".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn request_timeout(method: &str) -> Duration {
     match method {
         "connect" | "importLegacy" => Duration::from_secs(60),
-        "saveMode" | "mergeMode" | "deleteMode" | "updateSettings" | "configureDesktopStartup" => {
-            Duration::from_secs(30)
-        }
+        "testAllServerLatencies" => Duration::from_secs(70),
+        "testServerLatency" => Duration::from_secs(10),
+        "saveMode"
+        | "mergeMode"
+        | "deleteMode"
+        | "saveServer"
+        | "importServerLink"
+        | "duplicateServer"
+        | "deleteServer"
+        | "updateSettings"
+        | "configureDesktopStartup" => Duration::from_secs(30),
         "disconnect" | "shutdown" => Duration::from_secs(30),
         _ => Duration::from_secs(10),
     }
@@ -699,7 +913,7 @@ fn validate_runtime(path: &Path) -> Result<PathBuf, EngineError> {
 
 fn locate_engine_host() -> Result<PathBuf, EngineError> {
     #[cfg(debug_assertions)]
-    if let Some(path) = std::env::var_os("NETCH_ENGINE_HOST_PATH") {
+    if let Some(path) = std::env::var_os("NETF_ENGINE_HOST_PATH") {
         let path = PathBuf::from(path);
         if path.is_file() {
             return Ok(path);
@@ -708,14 +922,14 @@ fn locate_engine_host() -> Result<PathBuf, EngineError> {
 
     let beside_app = std::env::current_exe().ok().and_then(|path| {
         path.parent()
-            .map(|parent| parent.join("netch-engine-host.exe"))
+            .map(|parent| parent.join("netf-engine-host.exe"))
     });
     let development = std::env::current_dir()
         .ok()
-        .map(|path| path.join("src-tauri/binaries/netch-engine-host-x86_64-pc-windows-msvc.exe"));
+        .map(|path| path.join("src-tauri/binaries/netf-engine-host-x86_64-pc-windows-msvc.exe"));
     let cargo_development = std::env::current_dir()
         .ok()
-        .map(|path| path.join("binaries/netch-engine-host-x86_64-pc-windows-msvc.exe"));
+        .map(|path| path.join("binaries/netf-engine-host-x86_64-pc-windows-msvc.exe"));
 
     beside_app
         .into_iter()
@@ -728,6 +942,7 @@ fn locate_engine_host() -> Result<PathBuf, EngineError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
     use tempfile::tempdir;
 
     #[test]
@@ -770,7 +985,7 @@ mod tests {
         );
         let snapshot = attachment.snapshot;
 
-        assert_eq!(attachment.info.id, "netch-compat");
+        assert_eq!(attachment.info.id, "netf-engine");
         assert_eq!(attachment.info.api_version, 1);
         assert_eq!(snapshot.api_version, 1);
         assert_eq!(snapshot.status.state, "stopped");
@@ -810,7 +1025,7 @@ mod tests {
             .attach(directory.path())
             .expect("recovered attachment");
         assert_eq!(recovered.snapshot.status.state, "stopped");
-        assert_eq!(recovered.info.id, "netch-compat");
+        assert_eq!(recovered.info.id, "netf-engine");
     }
 
     #[test]
@@ -822,6 +1037,160 @@ mod tests {
         )
         .expect("valid protocol response");
         assert_eq!(response.id, 7);
+    }
+
+    #[test]
+    fn server_requests_use_a_typed_shape_and_reject_unknown_fields() {
+        let request: ServerEditRequest = serde_json::from_value(json!({
+            "serverId": null,
+            "type": "VLESS",
+            "remark": "Primary",
+            "hostname": "vpn.example.com",
+            "port": 443,
+            "configuration": {
+                "userId": { "action": "replace", "value": "feb54431-301b-52bb-a6dd-e1e93e81bb9e" },
+                "transferProtocol": "ws",
+                "fakeType": "none",
+                "serverName": "vpn.example.com"
+            }
+        }))
+        .expect("typed server request");
+        let value = serde_json::to_value(request).expect("serialize request");
+        assert_eq!(value["configuration"]["serverName"], "vpn.example.com");
+
+        let link_request: ServerLinkImportRequest = serde_json::from_value(json!({
+            "link": "vless://feb54431-301b-52bb-a6dd-e1e93e81bb9e@example.com:443?encryption=none&type=ws&path=%2F&packetEncoding=xudp#Example"
+        }))
+        .expect("typed link request");
+        assert!(
+            serde_json::to_value(link_request).unwrap()["link"]
+                .as_str()
+                .unwrap()
+                .starts_with("vless://")
+        );
+        assert!(
+            serde_json::from_value::<ServerLinkImportRequest>(json!({
+                "link": "vless://example",
+                "arbitraryPath": "C:\\Windows"
+            }))
+            .is_err()
+        );
+        assert!(
+            validate_server_link_request(&ServerLinkImportRequest {
+                link: "vless://id@example.com:443".into()
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_server_link_request(&ServerLinkImportRequest {
+                link: "vless://one\nvmess://two".into()
+            })
+            .is_err()
+        );
+
+        assert!(
+            serde_json::from_value::<ServerEditRequest>(json!({
+                "serverId": null,
+                "type": "SOCKS",
+                "remark": "Unexpected",
+                "hostname": "127.0.0.1",
+                "port": 1080,
+                "configuration": {},
+                "arbitraryArguments": ["--unsafe"]
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn owned_engine_manages_servers_without_returning_credentials() {
+        let runtime = tempdir().expect("owned runtime");
+        fs::create_dir_all(runtime.path().join("data")).unwrap();
+        fs::create_dir_all(runtime.path().join("mode")).unwrap();
+        fs::create_dir_all(runtime.path().join("bin")).unwrap();
+        fs::write(runtime.path().join("data/settings.json"), "{}").unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback listener");
+        let port = listener.local_addr().expect("loopback address").port();
+        let acceptor = std::thread::spawn(move || {
+            for connection in listener.incoming().take(3) {
+                drop(connection.expect("latency probe"));
+            }
+        });
+
+        let supervisor = EngineSupervisor::default();
+        supervisor
+            .attach(runtime.path())
+            .expect("engine attachment");
+        let saved = supervisor
+            .save_server(ServerEditRequest {
+                server_id: None,
+                server_type: "SOCKS".into(),
+                remark: "Local proxy".into(),
+                hostname: "127.0.0.1".into(),
+                port,
+                configuration: ServerConfigurationInput {
+                    username: Some("alice".into()),
+                    password: Some(SecretUpdate {
+                        action: "replace".into(),
+                        value: Some("engine-secret".into()),
+                    }),
+                    version: Some("5".into()),
+                    ..Default::default()
+                },
+            })
+            .expect("save server");
+        assert_eq!(saved.snapshot.servers.len(), 1);
+        assert!(saved.server.configuration.has_password);
+        assert!(
+            !serde_json::to_string(&saved.server)
+                .unwrap()
+                .contains("engine-secret")
+        );
+        let latency = supervisor
+            .test_server_latency(0)
+            .expect("typed endpoint latency");
+        acceptor.join().expect("latency acceptor");
+        assert_eq!(latency.server_id, 0);
+        assert_eq!(latency.method, "tcp");
+        assert_eq!(latency.status, "success");
+        assert!(latency.latency_ms.is_some());
+        assert!(
+            !serde_json::to_string(&latency)
+                .unwrap()
+                .contains("engine-secret")
+        );
+
+        let imported_secret = "feb54431-301b-52bb-a6dd-e1e93e81bb9e";
+        let imported = supervisor
+            .import_server_link(ServerLinkImportRequest {
+                link: format!(
+                    "vless://{imported_secret}@52.28.57.212:46359?encryption=none&type=ws&path=/&packetEncoding=xudp#Mine-me"
+                ),
+            })
+            .expect("import VLESS link");
+        assert_eq!(imported.snapshot.servers.len(), 2);
+        assert_eq!(imported.server.server_type, "VLESS");
+        assert_eq!(imported.server.remark, "Mine-me");
+        assert!(imported.server.configuration.has_user_id);
+        assert!(
+            !serde_json::to_string(&imported)
+                .unwrap()
+                .contains(imported_secret)
+        );
+
+        let detail = supervisor.server_detail(0).expect("server detail");
+        assert!(detail.configuration.has_password);
+        let duplicate = supervisor.duplicate_server(0).expect("duplicate server");
+        assert_eq!(duplicate.snapshot.servers.len(), 3);
+        let deleted = supervisor.delete_server(0).expect("delete server");
+        assert_eq!(deleted.snapshot.servers.len(), 2);
+        assert!(
+            Path::new(&deleted.backup_directory)
+                .join("settings.json")
+                .is_file()
+        );
     }
 
     #[test]

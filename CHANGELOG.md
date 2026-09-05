@@ -9,6 +9,65 @@ name and compatibility policy.
 
 ## [Unreleased]
 
+## [0.2.0] - Local review candidate
+
+### Added
+
+- Compact Servers **Connect / Library** workspaces with searchable manual create,
+  edit, duplicate, and confirmed-delete flows for SOCKS5, Xray-compatible
+  Shadowsocks, VMess, VLESS, Trojan, and WireGuard.
+- Typed server-detail and mutation APIs across React, Tauri/Rust, `EngineBackend`,
+  and the .NET host. Saved passwords, UUIDs, and private/pre-shared keys remain
+  inside the engine and use Keep saved/Replace/Clear mutation controls.
+- Offline single-link import for standard VLESS, VMess, Trojan, Shadowsocks, and
+  SOCKS5 URIs through a bounded typed command and strict .NET authority parser.
+  Pasted links are cleared after every attempt and never returned or logged.
+- Provider and endpoint validation for ports, hostnames/IPs, UUIDs, Shadowsocks
+  ciphers and 2022 keys, Xray transport/header/TLS combinations, and WireGuard
+  CIDRs/32-byte Base64 keys.
+- Accessible searchable connection-mode combobox with visible result counts,
+  keyboard selection, clear/Escape behavior, and explicit no-results state.
+- All/Built-in/Imported/User mode-origin filter chips with counts and composed
+  text filtering while preserving editor selection and unsaved text.
+- Fixed-path, opt-in previous-NetF-data discovery/import that accepts no webview
+  path and imports only validated settings and custom modes.
+- Explicit Windows auto-start repair/remove actions for a stale `NetF Startup` task.
+- Selected-server and bounded-concurrency library latency tests with three TCP
+  or ICMP endpoint probes, structured credential-free results, and live testing
+  of only the connected server at the compatible configured interval.
+- Supported settings parity for child-process routing, TUN adapter IPv4/netmask/
+  gateway, TUN custom/proxied DNS, endpoint test method, and live interval.
+- Versioned desktop close behavior with safe schema-v1 migration: hide to tray
+  or reuse the exact disconnect/cleanup-and-exit path.
+- .NET server lifecycle/secret/durability tests, Windows path/SID matcher tests,
+  strict Rust protocol and previous-path tests, real host CRUD IPC coverage, and
+  frontend filter/selection/provider-combination tests.
+
+### Changed
+
+- Adopted standalone product identity `io.github.amiradroit.netf`, backend identity
+  `netf-engine`, and sidecar name `netf-engine-host.exe`. The previous application
+  data directory remains untouched as an optional rollback/import source.
+- Replaced misleading unavailable-helper counts with required/optional Runtime
+  readiness and direct in-page navigation to readiness details.
+- Restricted imported unsupported SSR, SSH, legacy transport, XTLS, SOCKS4a,
+  plugin, and cipher shapes to read-only review/deletion; connection and
+  duplication fail closed without an unowned fallback.
+- Removed normal operational fork/compatibility wording; required upstream
+  attribution remains in About & legal, licenses, notices, and documentation.
+- Adjusted responsive breakpoints for the fixed sidebar and verified no horizontal
+  overflow at the supported 920×660 minimum window.
+
+### Fixed
+
+- Normalize Task Scheduler `\\?\` device paths, quotes, case, and equivalent
+  absolute paths; verify principals using the current Windows SID. This fixes
+  false “Registration differs from the current NetF installation” results.
+- Disabled Connect whenever the mode query no longer represents a valid selected
+  mode or the selected imported server is unsupported.
+- Cancel live endpoint probes before disconnect and shutdown, serialize manual
+  tests to prevent overlap, and keep NetF open if cleanup fails during close.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

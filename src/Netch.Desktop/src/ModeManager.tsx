@@ -4,6 +4,7 @@ import { LayersIcon, SearchIcon } from "./icons";
 import {
   canMutateModes,
   filterModes,
+  filterModesByOrigin,
   modeLabel,
   modeOriginLabel,
   type EngineSnapshot,
@@ -11,6 +12,7 @@ import {
   type ModeDetail,
   type ModeEditRequest,
   type ModeMergeResult,
+  type ModeOriginFilter,
   type ModeSaveResult,
 } from "./engine";
 import { errorMessage } from "./desktop";
@@ -34,6 +36,7 @@ function textToRules(text: string): string[] {
 
 export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
   const [query, setQuery] = useState("");
+  const [originFilter, setOriginFilter] = useState<ModeOriginFilter>("all");
   const [selectedId, setSelectedId] = useState<number | null>(snapshot.modes[0]?.id ?? null);
   const [detail, setDetail] = useState<ModeDetail | null>(null);
   const [remark, setRemark] = useState("");
@@ -45,7 +48,14 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ModeDetail | null>(null);
 
-  const filteredModes = useMemo(() => filterModes(snapshot.modes, query), [snapshot.modes, query]);
+  const filteredModes = useMemo(
+    () => filterModesByOrigin(snapshot.modes, query, originFilter),
+    [snapshot.modes, query, originFilter],
+  );
+  const originCounts = useMemo(() => snapshot.modes.reduce(
+    (counts, mode) => ({ ...counts, [mode.origin]: counts[mode.origin] + 1 }),
+    { "built-in": 0, imported: 0, user: 0 },
+  ), [snapshot.modes]);
   const selectedSummary = snapshot.modes.find((mode) => mode.id === selectedId) ?? null;
   const mergeSources = useMemo(
     () => filterModes(snapshot.modes, "").filter((mode) =>
@@ -207,10 +217,23 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
             placeholder="Search name, path, type, or origin"
           />
         </label>
-        <div className="mode-origin-legend">
-          <span className="origin-badge built-in">Built-in</span>
-          <span className="origin-badge imported">Imported</span>
-          <span className="origin-badge user">User</span>
+        <div className="mode-origin-legend" aria-label="Filter modes by origin">
+          {([
+            ["all", "All", snapshot.modes.length],
+            ["built-in", "Built-in", originCounts["built-in"]],
+            ["imported", "Imported", originCounts.imported],
+            ["user", "User", originCounts.user],
+          ] as const).map(([origin, label, count]) => (
+            <button
+              aria-pressed={originFilter === origin}
+              className={`origin-filter ${origin} ${originFilter === origin ? "active" : ""}`}
+              key={origin}
+              onClick={() => setOriginFilter(originFilter === origin && origin !== "all" ? "all" : origin)}
+              type="button"
+            >
+              {label} <span>{count}</span>
+            </button>
+          ))}
         </div>
         <div className="mode-list" role="listbox" aria-label="Alphabetical modes">
           {filteredModes.map((mode) => (
@@ -227,7 +250,7 @@ export function ModeManager({ snapshot, onSnapshot }: ModeManagerProps) {
               <span className={`origin-badge ${mode.origin}`}>{modeOriginLabel(mode.origin)}</span>
             </button>
           ))}
-          {!filteredModes.length && <p className="mode-empty">No modes match “{query}”.</p>}
+          {!filteredModes.length && <p className="mode-empty">No modes match the current filters.</p>}
         </div>
       </div>
 

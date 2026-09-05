@@ -109,11 +109,16 @@ fn disconnect_from_tray(app: &AppHandle) {
 }
 
 fn exit_from_tray(app: &AppHandle) {
+    request_exit(app);
+}
+
+pub(crate) fn request_exit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let controller = Arc::clone(app.state::<Arc<DesktopController>>().inner());
         match controller.shutdown(&app) {
             Ok(()) => app.exit(0),
+            Err(error) if error.code == "shutdown_in_progress" => {}
             Err(error) => {
                 controller.log(format!("Exit cleanup failed: {}", error.message));
                 show_main_window(&app);

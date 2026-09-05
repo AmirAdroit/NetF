@@ -19,7 +19,7 @@ export function StartupView({ startup, error, onRetry }: StartupViewProps) {
       <p className="startup-explainer">
         {startup.phase === "failed"
           ? startup.message
-          : "The interface remains responsive while the owned runtime and compatibility backend are verified."}
+          : "The interface remains responsive while the owned runtime and NetF engine are verified."}
       </p>
       <div className="startup-stages" aria-label="Startup progress">
         {stages.slice(0, 3).map((stage, index) => (

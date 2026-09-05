@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ActivityIcon,
   ChevronIcon,
-  FolderIcon,
   GridIcon,
   LayersIcon,
   MonitorIcon,
@@ -14,10 +13,6 @@ import {
 } from "./icons";
 import {
   canConnect,
-  canStopEngine,
-  filterModes,
-  modeLabel,
-  serverLabel,
   type EngineSnapshot,
   type EngineStatus,
   type LegacyImportResult,
@@ -26,6 +21,7 @@ import { ActivityView } from "./ActivityView";
 import { ModesView } from "./ModesView";
 import { OverviewView } from "./OverviewView";
 import { SettingsView } from "./SettingsView";
+import { ServersView } from "./ServersView";
 import { BrandMark } from "./BrandMark";
 import { StartupView } from "./StartupView";
 import { enginePresentation, errorMessage } from "./desktop";
@@ -49,7 +45,7 @@ type ViewName = (typeof navItems)[number]["label"];
 
 const viewHeadings: Record<ViewName, { eyebrow: string; title: string; badge: string }> = {
   Overview: { eyebrow: "Operational summary", title: "Overview", badge: "Owned runtime" },
-  Servers: { eyebrow: "Engine bridge", title: "Connection control", badge: "Compatibility engine" },
+  Servers: { eyebrow: "Connection workspace", title: "Servers", badge: "NetF engine" },
   Modes: { eyebrow: "Routing library", title: "Modes", badge: "Atomic mode editing" },
   Activity: { eyebrow: "Diagnostics", title: "Activity and logs", badge: "Sanitized output" },
   Settings: { eyebrow: "Configuration", title: "Settings", badge: "Validated writes" },
@@ -59,7 +55,6 @@ function App() {
   const desktop = useDesktopController();
   const engineSnapshot = desktop.snapshot;
   const setEngineSnapshot = desktop.setSnapshot;
-  const runtimeRoot = desktop.runtime?.runtimeRoot ?? "";
   const runtimeVersion = desktop.runtime?.runtimeVersion ?? "";
   const statusPresentation = enginePresentation(desktop.engine.phase);
   const [activeView, setActiveView] = useState<ViewName>("Overview");
@@ -71,15 +66,7 @@ function App() {
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
   const [engineBusy, setEngineBusy] = useState(false);
-  const [connectionModeQuery, setConnectionModeQuery] = useState("");
-
-  const connectionModes = useMemo(() => {
-    const filtered = filterModes(engineSnapshot?.modes ?? [], connectionModeQuery);
-    const selected = engineSnapshot?.modes.find((mode) => mode.id === selectedModeId);
-    return selected && !filtered.some((mode) => mode.id === selected.id)
-      ? [selected, ...filtered]
-      : filtered;
-  }, [engineSnapshot?.modes, connectionModeQuery, selectedModeId]);
+  const [previousDataAvailable, setPreviousDataAvailable] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -105,9 +92,16 @@ function App() {
 
   useEffect(() => {
     if (!engineSnapshot) return;
-    setSelectedServerId((current) => current ?? engineSnapshot.servers[0]?.id ?? null);
+    setSelectedServerId((current) => current ?? engineSnapshot.servers.find((server) => server.supported)?.id ?? engineSnapshot.servers[0]?.id ?? null);
     setSelectedModeId((current) => current ?? engineSnapshot.modes[0]?.id ?? null);
   }, [engineSnapshot]);
+
+  useEffect(() => {
+    if (desktop.startup.phase !== "ready") return;
+    void invoke<boolean>("previous_netf_data_available")
+      .then(setPreviousDataAvailable)
+      .catch(() => setPreviousDataAvailable(false));
+  }, [desktop.startup.phase]);
 
   async function importLegacyConfiguration() {
     if (engineBusy) return;
@@ -119,11 +113,29 @@ function App() {
       );
       if (!imported) return;
       setEngineSnapshot(imported.snapshot);
-      setSelectedServerId(imported.snapshot.servers[0]?.id ?? null);
+      setSelectedServerId(imported.snapshot.servers.find((server) => server.supported)?.id ?? imported.snapshot.servers[0]?.id ?? null);
       setSelectedModeId(imported.snapshot.modes[0]?.id ?? null);
       setImportSummary(
         `Imported ${imported.snapshot.servers.length} server(s) and ${imported.importedCustomModes} custom mode(s). A rollback backup was created.`,
       );
+    } catch (importError) {
+      setError(errorMessage(importError));
+    } finally {
+      setEngineBusy(false);
+    }
+  }
+
+  async function importPreviousConfiguration() {
+    if (engineBusy) return;
+    try {
+      setEngineBusy(true);
+      setError("");
+      const imported = await invoke<LegacyImportResult>("import_previous_netf_configuration");
+      setEngineSnapshot(imported.snapshot);
+      setSelectedServerId(imported.snapshot.servers.find((server) => server.supported)?.id ?? imported.snapshot.servers[0]?.id ?? null);
+      setSelectedModeId(imported.snapshot.modes[0]?.id ?? null);
+      setPreviousDataAvailable(false);
+      setImportSummary(`Imported ${imported.snapshot.servers.length} server(s) and ${imported.importedCustomModes} custom mode(s) from the previous NetF data directory.`);
     } catch (importError) {
       setError(errorMessage(importError));
     } finally {
@@ -224,10 +236,10 @@ function App() {
           </button>
         </div>
 
-        <div className="upstream-credit">
-          <span>GPL-3.0 fork of</span>
-          <strong>Netch by AmazingDM &amp; contributors</strong>
-        </div>
+        <button className="upstream-credit" onClick={() => setActiveView("Settings")} type="button">
+          <span>NetF 0.2.0</span>
+          <strong>About &amp; legal</strong>
+        </button>
       </aside>
 
       <main className="main-content">
@@ -266,151 +278,24 @@ function App() {
           <StartupView startup={desktop.startup} error={desktop.error} onRetry={() => void desktop.retry()} />
         ) : activeView === "Overview" ? (
           <OverviewView engineState={desktop.engine} snapshot={engineSnapshot} runtimeVersion={runtimeVersion} onNavigate={setActiveView} />
-        ) : activeView === "Servers" ? (
-          <div className="engine-workspace">
-            <section className="hero-card engine-hero">
-              <div className="hero-copy">
-                <span className="feature-icon"><ServerIcon /></span>
-                <div>
-                  <h2>Run the proven engine behind the modern desktop</h2>
-                  <p>
-                    The fork runs its own versioned runtime and verified cores. Import
-                    configuration from an older Netch installation without executing any
-                    binaries from that directory. Credentials stay inside the .NET engine.
-                  </p>
-                </div>
-              </div>
-              <div className="hero-meta">
-                <span>Typed API v1</span>
-                <span>Fixed command allowlist</span>
-                <span>Legacy fallback preserved</span>
-              </div>
-            </section>
-
-            <div className="workspace-grid engine-grid">
-              <section className="panel engine-panel">
-                <div className="panel-heading">
-                  <div>
-                    <span className="step-label">Runtime</span>
-                    <h2>{engineSnapshot ? "Profile selection" : "Prepare NetF"}</h2>
-                  </div>
-                  <span className={`connection-pill ${engineSnapshot?.status.state ?? "detached"}`}>
-                    {engineSnapshot?.status.state ?? "detached"}
-                  </span>
-                </div>
-
-                {!engineSnapshot ? (
-                  <div className="attach-runtime">
-                    <FolderIcon />
-                    <h3>Owned runtime is starting</h3>
-                    <p>
-                      The app is validating and installing its packaged engine assets.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="runtime-path">
-                      <FolderIcon /><span>{runtimeRoot}</span>
-                      <button disabled={engineBusy || engineSnapshot.status.state !== "stopped"} onClick={importLegacyConfiguration} type="button">
-                        Import
-                      </button>
-                    </div>
-
-                    <div className="profile-fields">
-                      <label>
-                        Server
-                        <select
-                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
-                          value={selectedServerId ?? ""}
-                          onChange={(event) => setSelectedServerId(Number(event.target.value))}
-                        >
-                          {engineSnapshot.servers.map((server) => (
-                            <option key={server.id} value={server.id}>
-                              [{server.type}] [{server.group}] {serverLabel(server)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Mode
-                        <input
-                          className="mode-select-search"
-                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
-                          value={connectionModeQuery}
-                          onChange={(event) => setConnectionModeQuery(event.target.value)}
-                          placeholder="Search modes…"
-                        />
-                        <select
-                          disabled={engineBusy || engineSnapshot.status.state === "connected"}
-                          value={selectedModeId ?? ""}
-                          onChange={(event) => setSelectedModeId(Number(event.target.value))}
-                        >
-                          {connectionModes.map((mode) => (
-                            <option key={mode.id} value={mode.id}>
-                              [{mode.origin}] [{mode.type}] {modeLabel(mode)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="engine-actions">
-                      {canStopEngine(engineSnapshot, desktop.engine.active || desktop.engine.phase === "failed") ? (
-                        <button className="stop-action" disabled={engineBusy} onClick={disconnectProfile} type="button">
-                          <ActivityIcon /> {engineBusy ? "Stopping…" : engineSnapshot.status.state === "failed" ? "Stop engine" : "Disconnect"}
-                        </button>
-                      ) : (
-                        <button
-                          className="primary-action"
-                          disabled={!canConnect(engineSnapshot, selectedServerId, selectedModeId) || engineBusy}
-                          onClick={connectProfile}
-                          type="button"
-                        >
-                          <ActivityIcon /> {engineBusy ? "Starting…" : "Connect"}
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {error && <div className="error-banner" role="alert">{error}</div>}
-                {importSummary && <div className="success-banner" role="status">{importSummary}</div>}
-              </section>
-
-              <aside className="panel health-panel">
-                <div className="panel-heading compact">
-                  <div><span className="step-label">Engine health</span><h2>Compatibility status</h2></div>
-                </div>
-                <dl className="health-list">
-                  <div><dt>API</dt><dd className="good">{engineSnapshot ? `v${engineSnapshot.apiVersion}` : "Waiting"}</dd></div>
-                  <div><dt>Servers</dt><dd>{engineSnapshot?.servers.length ?? 0}</dd></div>
-                  <div><dt>Modes</dt><dd>{engineSnapshot?.modes.length ?? 0}</dd></div>
-                  <div><dt>Optional helpers missing</dt><dd className={engineSnapshot?.missingHelpers.length ? "bad" : "good"}>{engineSnapshot?.missingHelpers.length ?? "—"}</dd></div>
-                  <div><dt>Runtime</dt><dd>{runtimeVersion ? `Owned v${runtimeVersion}` : "—"}</dd></div>
-                  <div><dt>Core source</dt><dd>{engineSnapshot ? "Fork package" : "—"}</dd></div>
-                  <div><dt>Proxy cores</dt><dd>{engineSnapshot?.proxyCores.join(", ") || "—"}</dd></div>
-                </dl>
-                {engineSnapshot?.missingHelpers.length ? (
-                  <div className="helper-warning">
-                    <strong>Some modes are not packaged yet</strong>
-                    {engineSnapshot.capabilities
-                      .filter((capability) => !capability.available)
-                      .map((capability) => (
-                        <p key={capability.name}>
-                          {capability.name}: {capability.missing.join(", ")}
-                        </p>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="health-explainer">
-                    Connections use only the fork-owned runtime. Import reads legacy
-                    configuration and custom modes, but ignores every executable, DLL,
-                    driver, and helper in the selected directory.
-                  </p>
-                )}
-              </aside>
-            </div>
-          </div>
+        ) : activeView === "Servers" && engineSnapshot ? (
+          <ServersView
+            snapshot={engineSnapshot}
+            selectedServerId={selectedServerId}
+            selectedModeId={selectedModeId}
+            engineBusy={engineBusy}
+            connectionMayBeActive={desktop.engine.active || desktop.engine.phase === "failed"}
+            error={error}
+            message={importSummary}
+            previousDataAvailable={previousDataAvailable}
+            onSelectServer={setSelectedServerId}
+            onSelectMode={setSelectedModeId}
+            onSnapshot={setEngineSnapshot}
+            onConnect={() => void connectProfile()}
+            onDisconnect={() => void disconnectProfile()}
+            onImport={() => void importLegacyConfiguration()}
+            onImportPrevious={() => void importPreviousConfiguration()}
+          />
         ) : activeView === "Modes" ? (
           <ModesView
             snapshot={engineSnapshot}

@@ -1,4 +1,4 @@
-export const THEME_STORAGE_KEY = "netch.theme";
+export const THEME_STORAGE_KEY = "netf.theme";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = Exclude<ThemePreference, "system">;

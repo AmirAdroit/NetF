@@ -2,7 +2,7 @@
 
 ## Why this application is high risk
 
-Netch is not an ordinary desktop UI. It can run elevated, install or replace a
+NetF is not an ordinary desktop UI. It can run elevated, install or replace a
 kernel networking driver, load native libraries, spawn proxy cores, change
 routes and DNS, add firewall rules, inspect processes, and store proxy
 credentials. A webview-based UI also introduces an IPC trust boundary.
@@ -30,7 +30,9 @@ The practical threat model includes:
 - Sidecar executable names and argument shapes are allowlisted in native code.
 - Windows auto-start uses one fixed per-user Task Scheduler name and the
   internally resolved NetF executable. The frontend supplies only an enabled
-  boolean; registration is verified before the setting is persisted.
+  boolean; registration is verified before the setting is persisted. Quoted and
+  `\\?\` device paths are normalized before comparison, and the principal is
+  verified against the current Windows SID instead of display-name text alone.
 - Secrets are redacted before structured logging and diagnostics export.
 - Configuration writes are backed up, validated, and atomic.
 - Privileged mutations have idempotent compensating cleanup.
@@ -43,8 +45,33 @@ The current child-stdio bridge does not expose a listening IPC endpoint. When
 the UI and privileged broker are separated, the named-pipe authentication and
 ACL invariant above becomes mandatory before the broker is enabled.
 
-Mode and settings management expose typed fields only. Process and TUN rule
-lists are bounded to 10,000 entries with bounded line lengths, filenames are
+Server, mode, and settings management expose typed fields only and require a
+stopped/failed engine. Server details return secret-presence booleans rather than
+saved passwords, UUIDs, private keys, or pre-shared keys. Secret mutations use
+the closed `keep`, `replace`, or `clear` enum; unsupported imported provider
+shapes are read-only and cannot be connected or duplicated. Provider, endpoint,
+port, UUID, cipher, transport/header, TLS, WireGuard CIDR/key, and state checks
+are repeated in the .NET authority before atomic persistence.
+
+Latency testing accepts only an integer server ID from the webview. The .NET
+authority reads the saved hostname and port, applies bounded DNS and three
+bounded TCP/ICMP probes, caps all-server concurrency, prevents overlapping test
+batches, and cancels live probes before cleanup. Results contain only ID,
+method, status, milliseconds, and timestamp. They do not contain the endpoint or
+credentials and must not be described as proxy authentication or traffic proof.
+
+Single-server share-link import is an explicit exception to the rule that saved
+secrets never enter React: a newly pasted URI necessarily exists briefly in the
+paste box and typed Tauri request. The control accepts exactly one non-empty URI
+of at most 8,192 characters and clears it before awaiting the engine response.
+Rust repeats the size/single-line bound; the .NET authority allowlists VLESS,
+VMess, Trojan, Shadowsocks, and SOCKS5 schemes, parses offline, rejects unknown
+or duplicate options, and reuses the normal provider compatibility gate. The
+request and parser never log or echo the link, and responses contain only secret
+presence flags. Subscription fetching, multi-line import, Shadowsocks plugins,
+Reality/XTLS options, and non-standard WireGuard URI guessing remain disabled.
+
+Process and TUN rule lists are bounded to 10,000 entries with bounded line lengths, filenames are
 sanitized under owned mode directories, and reparse-point paths are rejected.
 Built-in templates are never overwritten by the UI. A confirmed deletion is a
 separate stopped-state operation: it uses only a mode ID, validates the resolved
@@ -80,6 +107,12 @@ The only frontend folder-open command accepts the closed enum `modes` or
 NetF-owned app data, rejects reparse points, and starts `explorer.exe` directly
 without a shell or frontend-controlled argument path.
 
+Previous-data import accepts no frontend path. Rust resolves only the fixed
+`%LOCALAPPDATA%\org.netchfork.preview\runtime` source beside the current
+`io.github.amiradroit.netf` identity. Import reads validated settings and custom
+modes transactionally and never copies old binaries, DLLs, logs, caches, or geo
+assets. The previous directory is not modified.
+
 ## Known gaps inherited from upstream
 
 - Build scripts download mutable third-party content without a pinned digest.
@@ -92,6 +125,8 @@ without a shell or frontend-controlled argument path.
 - Some secrets may be passed to child processes or retained in settings.
 - Automated tests do not currently validate route/DNS/firewall rollback.
 - The updater needs a fresh authenticity and rollback design before reuse.
+- TCP reachability can be misleading for UDP-only WireGuard endpoints; ICMP is
+  the appropriate optional endpoint signal when the host/provider permits it.
 
 These are release blockers for a public stable build, not reasons to discard the
 working behavior before replacements exist.
@@ -108,4 +143,7 @@ Use disposable Windows VMs with snapshots for tests that mutate the host:
   reboot recovery, and uninstall;
 - metered/offline/multi-NIC/IPv6 scenarios;
 - malicious configuration, subscription, and IPC inputs;
+- hostile share links including oversized input, multiple lines, duplicate
+  parameters, malformed Base64/JSON/percent encoding, unsupported schemes and
+  transports, plugin/Reality options, IPv6 endpoints, and credential redaction;
 - verification that diagnostics and logs contain no credentials.

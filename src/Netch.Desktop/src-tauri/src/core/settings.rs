@@ -5,13 +5,22 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use thiserror::Error;
 
-const SETTINGS_SCHEMA_VERSION: u32 = 1;
+const SETTINGS_SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseBehavior {
+    #[default]
+    HideToTray,
+    Exit,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DesktopSettings {
     pub schema_version: u32,
     pub run_at_windows_login: bool,
+    pub close_behavior: CloseBehavior,
 }
 
 impl Default for DesktopSettings {
@@ -19,6 +28,7 @@ impl Default for DesktopSettings {
         Self {
             schema_version: SETTINGS_SCHEMA_VERSION,
             run_at_windows_login: false,
+            close_behavior: CloseBehavior::HideToTray,
         }
     }
 }
@@ -62,9 +72,18 @@ impl SettingsStore {
         let loaded = if self.path.exists() {
             let bytes =
                 fs::read(&self.path).map_err(|error| SettingsError::Read(error.to_string()))?;
-            let parsed: DesktopSettings = serde_json::from_slice(&bytes)
+            let mut parsed: DesktopSettings = serde_json::from_slice(&bytes)
                 .map_err(|error| SettingsError::Invalid(error.to_string()))?;
+            let migrated = parsed.schema_version == 1;
+            if migrated {
+                parsed.schema_version = SETTINGS_SCHEMA_VERSION;
+            }
             validate(&parsed)?;
+            if migrated {
+                let upgraded = serde_json::to_vec_pretty(&parsed)
+                    .map_err(|error| SettingsError::Write(error.to_string()))?;
+                atomic_write(&self.path, &upgraded)?;
+            }
             parsed
         } else {
             DesktopSettings::default()
@@ -174,5 +193,18 @@ mod tests {
         assert!(saved.run_at_windows_login);
         assert!(store.path().is_file());
         assert_eq!(store.load().unwrap(), saved);
+    }
+
+    #[test]
+    fn schema_one_settings_migrate_to_safe_close_behavior() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("desktop-settings.json");
+        fs::write(&path, br#"{"schemaVersion":1,"runAtWindowsLogin":true}"#).unwrap();
+        let store = SettingsStore::new(path.clone());
+        let migrated = store.load().unwrap();
+        assert_eq!(migrated.schema_version, 2);
+        assert!(migrated.run_at_windows_login);
+        assert_eq!(migrated.close_behavior, CloseBehavior::HideToTray);
+        assert!(fs::read_to_string(path).unwrap().contains("hideToTray"));
     }
 }

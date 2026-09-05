@@ -64,7 +64,7 @@ Exit criteria:
 
 ## Phase 3 — Core feature parity
 
-- Servers, subscriptions, share links, profiles, latency tests, and updates.
+- Subscriptions, batch links, profile automation, NAT tests, and updates.
 - Process mode, TUN mode, sharing mode, DNS behavior, bandwidth, tray behavior,
   autostart, logs, and localization.
 - Import from a legacy install with preview and rollback.

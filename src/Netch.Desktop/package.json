@@ -1,7 +1,7 @@
 {
   "name": "netf-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -10,6 +10,7 @@
     "prepare:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-engine.ps1",
     "prepare:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1",
     "prepare:desktop": "npm run prepare:engine && npm run prepare:runtime",
+    "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-portable.ps1 -Configuration Release",
     "test": "vitest run",
     "tauri": "tauri",
     "tauri:build": "tauri build --features elevated",

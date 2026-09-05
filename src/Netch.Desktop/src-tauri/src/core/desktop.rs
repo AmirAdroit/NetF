@@ -1,4 +1,4 @@
-use super::backend::{BackendInfo, EngineBackend, NetchCompatibilityBackend};
+use super::backend::{BackendInfo, EngineBackend, EngineHostBackend};
 use super::engine::{EngineError, EngineLogResult, EngineStatus};
 use super::runtime::OwnedRuntime;
 use super::settings::{DesktopSettings, DesktopStartupStatus, SettingsError, SettingsStore};
@@ -131,10 +131,7 @@ pub struct DesktopController {
 
 impl DesktopController {
     pub fn new(settings_path: PathBuf) -> Arc<Self> {
-        Self::with_backend(
-            settings_path,
-            Arc::new(NetchCompatibilityBackend::default()),
-        )
+        Self::with_backend(settings_path, Arc::new(EngineHostBackend::default()))
     }
 
     fn with_backend(settings_path: PathBuf, backend: Arc<dyn EngineBackend>) -> Arc<Self> {
@@ -225,7 +222,7 @@ impl DesktopController {
         self.transition_startup(
             &app,
             StartupPhase::StartingEngine,
-            "Starting and validating the compatibility backend",
+            "Starting and validating the NetF engine",
             started,
             false,
         );
@@ -512,9 +509,24 @@ impl DesktopController {
     }
 
     pub fn shutdown(&self, app: &AppHandle) -> Result<(), DesktopError> {
+        if self
+            .shutting_down
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(DesktopError::new(
+                "shutdown_in_progress",
+                "NetF cleanup is already in progress.",
+                false,
+            ));
+        }
         let state = self.engine_state();
-        if self.startup().phase == StartupPhase::Ready && state.phase != EnginePhase::Stopped {
-            self.disconnect(app)?;
+        if self.startup().phase == StartupPhase::Ready
+            && state.phase != EnginePhase::Stopped
+            && let Err(error) = self.disconnect(app)
+        {
+            self.shutting_down.store(false, Ordering::Release);
+            return Err(error);
         }
         if let Err(error) = self.backend.shutdown() {
             let error = DesktopError::from(error);
@@ -522,9 +534,9 @@ impl DesktopController {
                 "Engine cleanup failed during shutdown: {}",
                 error.code
             ));
+            self.shutting_down.store(false, Ordering::Release);
             return Err(error);
         }
-        self.shutting_down.store(true, Ordering::Release);
         self.transition_engine(app, EnginePhase::Stopped, false, "Stopped");
         Ok(())
     }
@@ -577,7 +589,7 @@ impl DesktopController {
         Ok(EngineLogResult {
             lines,
             truncated,
-            source: "NetF desktop and compatibility engine".into(),
+            source: "NetF desktop and engine".into(),
         })
     }
 
